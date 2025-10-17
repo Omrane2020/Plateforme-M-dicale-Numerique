@@ -1,0 +1,7 @@
+git init
+git remote add origin https://github.com/Omrane2020/Plateforme-M-dicale-Numerique
+git add .
+git commit -m "message"
+git branch -M main
+git pull origin main --rebase  # si le remote a du contenu
+git push -u origin main
