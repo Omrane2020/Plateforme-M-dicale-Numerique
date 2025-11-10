@@ -1,29 +1,28 @@
 import React from 'react';
 import { Button } from './ui/button';
 import { Stethoscope, Menu, X } from 'lucide-react';
-import type { UserType } from "../types";
-
-type Page = 'home' | 'login' | 'signup' | 'doctor-dashboard' | 'doctor-profile' | 'patient-management' | 'appointments' | 'patient-dashboard' | 'contact' | 'subscription-plans';
-
-
+import { useAppNavigation } from '../hooks/useAppNavigation';
+import type { UserType } from '../types/UserType';
+import type { Page } from '../types/Page';
 interface HeaderProps {
-  onNavigate: (page: Page) => void;
+  onNavigate: (page: Page) => void; 
   isAuthenticated: boolean;
   userType: UserType;
   onLogout: () => void;
 }
 
-export function Header({ onNavigate, isAuthenticated, userType, onLogout }: HeaderProps) {
+export function Header({ isAuthenticated, userType, onLogout }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+  const onNavigate = useAppNavigation(); // ✅ Hook de navigation intégré
 
   return (
     <header className="bg-white shadow-sm border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <div 
+          <div
             className="flex items-center space-x-2 cursor-pointer"
-            onClick={() => onNavigate('home')}
+            onClick={() => onNavigate('/')}
           >
             <div className="bg-blue-600 p-2 rounded-lg">
               <Stethoscope className="h-6 w-6 text-white" />
@@ -31,41 +30,41 @@ export function Header({ onNavigate, isAuthenticated, userType, onLogout }: Head
             <span className="text-xl text-slate-800">MedPlatform</span>
           </div>
 
-          {/* Desktop Navigation */}
+          {/* Navigation Desktop */}
           <nav className="hidden md:flex items-center space-x-8">
-            <button 
-              onClick={() => onNavigate('home')}
+            <button
+              onClick={() => onNavigate('/')}
               className="text-slate-600 hover:text-blue-600 transition-colors"
             >
               Accueil
             </button>
-            <button 
-              onClick={() => onNavigate('subscription-plans')}
+            <button
+              onClick={() => onNavigate('/subscription-plans')}
               className="text-slate-600 hover:text-blue-600 transition-colors"
             >
               Tarifs
             </button>
-            <button 
-              onClick={() => onNavigate('contact')}
+            <button
+              onClick={() => onNavigate('/contact')}
               className="text-slate-600 hover:text-blue-600 transition-colors"
             >
               Contact
             </button>
           </nav>
 
-          {/* Auth Buttons */}
+          {/* Auth Desktop */}
           <div className="hidden md:flex items-center space-x-4">
             {!isAuthenticated ? (
               <>
-                <Button 
-                  variant="outline" 
-                  onClick={() => onNavigate('login')}
+                <Button
+                  variant="outline"
+                  onClick={() => onNavigate('/login')}
                   className="border-blue-600 text-blue-600 hover:bg-blue-50"
                 >
                   Se connecter
                 </Button>
-                <Button 
-                  onClick={() => onNavigate('signup')}
+                <Button
+                  onClick={() => onNavigate('/signup')}
                   className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   Commencer
@@ -74,10 +73,10 @@ export function Header({ onNavigate, isAuthenticated, userType, onLogout }: Head
             ) : (
               <div className="flex items-center space-x-4">
                 <span className="text-slate-600">
-                  {userType === 'doctor' ? 'Dr.' : 'Patient'} Connecté
+                  {userType === 'doctor' ? 'Dr.' : 'Patient'} connecté
                 </span>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={onLogout}
                   className="border-red-600 text-red-600 hover:bg-red-50"
                 >
@@ -87,7 +86,7 @@ export function Header({ onNavigate, isAuthenticated, userType, onLogout }: Head
             )}
           </div>
 
-          {/* Mobile menu button */}
+          {/* Mobile Menu Button */}
           <button
             className="md:hidden p-2"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -96,53 +95,53 @@ export function Header({ onNavigate, isAuthenticated, userType, onLogout }: Head
           </button>
         </div>
 
-        {/* Mobile Navigation */}
+        {/* Navigation Mobile */}
         {isMenuOpen && (
           <div className="md:hidden py-4 border-t border-slate-200">
             <div className="flex flex-col space-y-4">
-              <button 
+              <button
                 onClick={() => {
-                  onNavigate('home');
+                  onNavigate('/');
                   setIsMenuOpen(false);
                 }}
                 className="text-slate-600 hover:text-blue-600 text-left transition-colors"
               >
                 Accueil
               </button>
-              <button 
+              <button
                 onClick={() => {
-                  onNavigate('subscription-plans');
+                  onNavigate('/subscription-plans');
                   setIsMenuOpen(false);
                 }}
                 className="text-slate-600 hover:text-blue-600 text-left transition-colors"
               >
                 Tarifs
               </button>
-              <button 
+              <button
                 onClick={() => {
-                  onNavigate('contact');
+                  onNavigate('/contact');
                   setIsMenuOpen(false);
                 }}
                 className="text-slate-600 hover:text-blue-600 text-left transition-colors"
               >
                 Contact
               </button>
-              
+
               {!isAuthenticated ? (
                 <div className="flex flex-col space-y-2 pt-4">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={() => {
-                      onNavigate('login');
+                      onNavigate('/login');
                       setIsMenuOpen(false);
                     }}
                     className="border-blue-600 text-blue-600 hover:bg-blue-50"
                   >
                     Se connecter
                   </Button>
-                  <Button 
+                  <Button
                     onClick={() => {
-                      onNavigate('signup');
+                      onNavigate('/signup');
                       setIsMenuOpen(false);
                     }}
                     className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -153,10 +152,10 @@ export function Header({ onNavigate, isAuthenticated, userType, onLogout }: Head
               ) : (
                 <div className="flex flex-col space-y-2 pt-4">
                   <span className="text-slate-600">
-                    {userType === 'doctor' ? 'Dr.' : 'Patient'} Connecté
+                    {userType === 'doctor' ? 'Dr.' : 'Patient'} connecté
                   </span>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={() => {
                       onLogout();
                       setIsMenuOpen(false);

@@ -1,69 +1,105 @@
 import { useState } from 'react';
-import { SubscriptionPlans } from './components/SubscriptionPlans';
-import { Payment } from './components/Payment';
-import type { UserType } from "./types";
-import './styles/globals.css';
+import { BrowserRouter, useNavigate } from 'react-router-dom';
+import { AppRoutes } from './routes';
+import { SubscriptionProvider } from './contexts/SubscriptionContext';
+import { Toaster } from './components/ui/sonner';
 
-type Page = 'subscription-plans' | 'payment';
+import type { UserType } from './types/UserType';
 
-export default function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('subscription-plans');
-  const [userType, setUserType] = useState<UserType | null>(null);
+function AppInner() {
+  const navigate = useNavigate();
+
+  const [userType, setUserType] = useState<UserType>('doctor');
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const handleLogin = (email: string, password: string) => {
+    if (email.includes('admin')) setUserType('admin');
+    else if (email.includes('doctor') || email.includes('medecin')) setUserType('doctor');
+    else if (email.includes('secretary') || email.includes('secretaire')) setUserType('secretary');
+    else setUserType('patient');
+
+    setIsAuthenticated(true);
+    console.log('[Auth] Connexion réussie:', { email, role: userType });
+  };
+
+  const handleSignup = (formData: any) => {
+    const { userType: type } = formData;
+    setUserType(type);
+    setIsAuthenticated(true);
+    console.log('[Auth] Inscription réussie:', formData);
+  };
 
   const handleLogout = () => {
     setUserType(null);
+    setIsAuthenticated(false);
     setSelectedPlan(null);
-    setCurrentPage('subscription-plans');
+    console.log('[Auth] Déconnexion');
+    navigate('/'); // ✅ Retour à l’accueil
   };
 
   const handleSelectPlan = (plan: any) => {
     setSelectedPlan(plan);
-    setCurrentPage('payment');
+    console.log('[Subscription] Plan sélectionné:', plan);
   };
 
-  // ✅ Ici on cast en string pour correspondre à la prop attendue
-  const navigate = (page: string) => setCurrentPage(page as Page);
+  /** 🌐 Navigation réelle */
+  const handleNavigate = (page: string) => {
+    console.log('[Navigation] Page demandée:', page);
+    switch (page) {
+      case 'home': navigate('/'); break;
+      case 'signup': navigate('/signup'); break;
+      case 'login': navigate('/login'); break;
+      case 'contact': navigate('/contact'); break;
+      case 'subscription-plans': navigate('/subscription-plans'); break;
 
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'subscription-plans':
-        return (
-          <SubscriptionPlans
-            onNavigate={navigate} // ✅ plus d'erreur ici
-            userType={userType}
-            onLogout={handleLogout}
-            onSelectPlan={handleSelectPlan}
-            isAuthenticated={isAuthenticated} 
-          />
-        );
-      case 'payment':
-        return (
-          <Payment
-            onNavigate={navigate} // ✅ plus d'erreur ici aussi
-            userType={userType}
-            onLogout={handleLogout}
-            selectedPlan={selectedPlan}
-            isAuthenticated={isAuthenticated} 
-          />
-        );
+      // ✅ Routes spécifiques au médecin
+      case 'doctor-dashboard': navigate('/doctor/dashboard'); break;
+      case 'doctor-profile': navigate('/doctor/profile'); break;
+      case 'patient-management': navigate('/doctor/patients'); break;
+      case 'appointments': navigate('/doctor/appointments'); break;
+      case 'prescription': navigate('/doctor/prescriptions'); break;
+      case 'prescriptions': navigate('/doctor/prescriptions'); break;
+      case 'doctor-history': navigate('/doctor/history'); break;
+      case 'secretary-management': navigate('/doctor/secretaries'); break;
+      // ✅ Routes spécifiques au secrétaire
+      // ✅ Routes spécifiques au secrétaire
+      case 'secretary-dashboard': navigate('/secretary/dashboard'); break;
+      case 'secretary-patient-management': navigate('/secretary/patients'); break;
+      case 'secretary-appointments': navigate('/secretary/appointments'); break;
+      case 'add-patient': navigate('/secretary/add-patient'); break;
+      case 'secretary-notifications': navigate('/secretary/notifications'); break;
+
+
       default:
-        return (
-          <SubscriptionPlans
-            onNavigate={navigate}
-            userType={userType}
-            onLogout={handleLogout}
-            onSelectPlan={handleSelectPlan}
-            isAuthenticated={isAuthenticated} 
-          />
-        );
+        console.warn('Page inconnue:', page);
+        navigate('/404');
     }
   };
 
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      {renderPage()}
-    </div>
+    <SubscriptionProvider>
+      <div className="min-h-screen bg-gray-50">
+        <AppRoutes
+          isAuthenticated={isAuthenticated}
+          userType={userType}
+          onNavigate={handleNavigate}
+          onLogout={handleLogout}
+          onLogin={handleLogin}
+          onSignup={handleSignup}
+          onSelectPlan={handleSelectPlan}
+        />
+        <Toaster position="top-right" />
+      </div>
+    </SubscriptionProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppInner />
+    </BrowserRouter>
   );
 }

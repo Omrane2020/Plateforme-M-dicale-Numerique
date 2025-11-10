@@ -1,8 +1,0 @@
-export type Page = 
-  | 'home' | 'login' | 'signup' | 'doctor-dashboard' | 'doctor-profile'
-  | 'patient-management' | 'appointments' | 'patient-dashboard' | 'contact'
-  | 'prescription' | 'secretary-dashboard' | 'secretary-management' 
-  | 'secretary-appointments' | 'secretary-patient-management' | 'add-patient'
-  | 'doctor-history' | 'patient-history' | 'request-appointment'
-  | 'admin-dashboard' | 'user-management' | 'system-reports' | 'system-settings'
-  | 'activity-logs' | 'security-center' | 'add-user' | 'subscription-plans' | 'payment';

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import  { useState } from 'react';
 import { Header } from './Header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -21,8 +21,6 @@ import {
   TrendingUp,
   UserCheck,
   MessageSquare,
-  Bell,
-  BarChart3,
   Sparkles,
   CheckCircle2,
   CalendarCheck,
@@ -30,20 +28,63 @@ import {
   ClipboardCheck,
   Send
 } from 'lucide-react';
-import type { UserType } from '../types';
+import { useSubscriptions } from '../contexts/SubscriptionContext';
+import type { UserType } from '../types/UserType';
 interface SubscriptionPlansProps {
   onNavigate: (page: string) => void;
   isAuthenticated: boolean;
-  userType: UserType;
+  userType: UserType ;
   onLogout: () => void;
   onSelectPlan: (plan: any) => void;
 }
 
 export function SubscriptionPlans({ onNavigate, isAuthenticated, userType, onLogout, onSelectPlan }: SubscriptionPlansProps) {
+  const { getPlansByCategory } = useSubscriptions();
   const [selectedPlan, setSelectedPlan] = useState<string>('');
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedPlanType, setSelectedPlanType] = useState<'doctor' | 'clinic' | 'patient'>('doctor');
 
+  // Récupérer les plans depuis le contexte (seulement les actifs)
+  const allDoctorPlans = getPlansByCategory('doctor').filter(p => p.active);
+  const allClinicPlans = getPlansByCategory('clinic').filter(p => p.active);
+  const allPatientPlans = getPlansByCategory('patient').filter(p => p.active);
+
+  // Plans médecins avec icônes
+  const doctorPlans = allDoctorPlans.map(plan => ({
+    ...plan,
+    icon: plan.color === 'green' ? <Star className="w-8 h-8" /> : 
+          plan.color === 'purple' ? <Crown className="w-8 h-8" /> : 
+          <Users className="w-8 h-8" />
+  }));
+
+  // Plans cliniques avec icônes  
+  const clinicPlans = allClinicPlans.map(plan => ({
+    ...plan,
+    icon: plan.color === 'green' ? <Zap className="w-8 h-8" /> : 
+          plan.color === 'purple' ? <Crown className="w-8 h-8" /> : 
+          <Shield className="w-8 h-8" />
+  }));
+
+  // Plans patients avec icônes
+  const patientPlans = allPatientPlans.map(plan => ({
+    ...plan,
+    icon: plan.color === 'green' ? <Heart className="w-8 h-8" /> : 
+          plan.color === 'purple' ? <Users className="w-8 h-8" /> : 
+          <Star className="w-8 h-8" />
+  }));
+
+  const getCurrentPlans = () => {
+    switch (selectedPlanType) {
+      case 'doctor': return doctorPlans;
+      case 'clinic': return clinicPlans;
+      case 'patient': return patientPlans;
+      default: return doctorPlans;
+    }
+  };
+
+  const plans = getCurrentPlans();
+
+  /* ANCIEN CODE (maintenant géré par le contexte SubscriptionContext)
   const doctorPlans = [
     {
       id: 'doctor-basic',
@@ -250,17 +291,7 @@ export function SubscriptionPlans({ onNavigate, isAuthenticated, userType, onLog
       ]
     }
   ];
-
-  const getCurrentPlans = () => {
-    switch (selectedPlanType) {
-      case 'doctor': return doctorPlans;
-      case 'clinic': return clinicPlans;
-      case 'patient': return patientPlans;
-      default: return doctorPlans;
-    }
-  };
-
-  const plans = getCurrentPlans();
+  */
 
   const handleSelectPlan = (plan: any) => {
     const selectedPlanData = {

@@ -24,14 +24,13 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { UserType } from '../types';
-
+import type { UserType } from '../types/UserType';
 interface PaymentProps {
   onNavigate: (page: string) => void;
   isAuthenticated: boolean;
-  userType: UserType;
+  userType:UserType ;
   onLogout: () => void;
-  selectedPlan: any;
+  selectedPlan?: any;
 }
 
 export function Payment({ onNavigate, isAuthenticated, userType, onLogout, selectedPlan }: PaymentProps) {

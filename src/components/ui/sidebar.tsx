@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { type VariantProps, cva } from "class-variance-authority";
-
+import { PanelLeftIcon } from "lucide-react";
 
 import { useIsMobile } from "./use-mobile";
 import { cn } from "./utils";
@@ -272,7 +272,10 @@ function SidebarTrigger({
         toggleSidebar();
       }}
       {...props}
-    />
+    >
+      <PanelLeftIcon />
+      <span className="sr-only">Toggle Sidebar</span>
+    </Button>
   );
 }
 
@@ -390,15 +393,11 @@ function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-interface SidebarGroupLabelProps extends React.HTMLAttributes<HTMLElement> {
-  asChild?: boolean;
-}
-
 function SidebarGroupLabel({
   className,
   asChild = false,
   ...props
-}: SidebarGroupLabelProps) {
+}: React.ComponentProps<"div"> & { asChild?: boolean }) {
   const Comp = asChild ? Slot : "div";
 
   return (
@@ -415,15 +414,11 @@ function SidebarGroupLabel({
   );
 }
 
-interface SidebarGroupActionProps extends React.HTMLAttributes<HTMLElement> {
-  asChild?: boolean;
-}
-
 function SidebarGroupAction({
   className,
   asChild = false,
   ...props
-}: SidebarGroupActionProps) {
+}: React.ComponentProps<"button"> & { asChild?: boolean }) {
   const Comp = asChild ? Slot : "button";
 
   return (
@@ -500,12 +495,6 @@ const sidebarMenuButtonVariants = cva(
   },
 );
 
-interface SidebarMenuButtonProps extends React.HTMLAttributes<HTMLElement>, VariantProps<typeof sidebarMenuButtonVariants> {
-  asChild?: boolean;
-  isActive?: boolean;
-  tooltip?: string | React.ComponentProps<typeof TooltipContent>;
-}
-
 function SidebarMenuButton({
   asChild = false,
   isActive = false,
@@ -514,7 +503,11 @@ function SidebarMenuButton({
   tooltip,
   className,
   ...props
-}: SidebarMenuButtonProps) {
+}: React.ComponentProps<"button"> & {
+  asChild?: boolean;
+  isActive?: boolean;
+  tooltip?: string | React.ComponentProps<typeof TooltipContent>;
+} & VariantProps<typeof sidebarMenuButtonVariants>) {
   const Comp = asChild ? Slot : "button";
   const { isMobile, state } = useSidebar();
 
@@ -551,17 +544,16 @@ function SidebarMenuButton({
     </Tooltip>
   );
 }
-interface SidebarMenuActionProps extends React.HTMLAttributes<HTMLElement> {
-  asChild?: boolean;
-  showOnHover?: boolean;
-}
 
 function SidebarMenuAction({
   className,
   asChild = false,
   showOnHover = false,
   ...props
-}: SidebarMenuActionProps) {
+}: React.ComponentProps<"button"> & {
+  asChild?: boolean;
+  showOnHover?: boolean;
+}) {
   const Comp = asChild ? Slot : "button";
 
   return (
@@ -674,19 +666,17 @@ function SidebarMenuSubItem({
   );
 }
 
-interface SidebarMenuSubButtonProps extends React.HTMLAttributes<HTMLElement> {
-  asChild?: boolean;
-  size?: "sm" | "md";
-  isActive?: boolean;
-}
-
 function SidebarMenuSubButton({
   asChild = false,
   size = "md",
   isActive = false,
   className,
   ...props
-}: SidebarMenuSubButtonProps) {
+}: React.ComponentProps<"a"> & {
+  asChild?: boolean;
+  size?: "sm" | "md";
+  isActive?: boolean;
+}) {
   const Comp = asChild ? Slot : "a";
 
   return (

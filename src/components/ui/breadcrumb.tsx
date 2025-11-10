@@ -31,15 +31,13 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
   );
 }
 
-interface BreadcrumbLinkProps extends React.HTMLAttributes<HTMLElement> {
-  asChild?: boolean;
-}
-
 function BreadcrumbLink({
   asChild,
   className,
   ...props
-}: BreadcrumbLinkProps) {
+}: React.ComponentProps<"a"> & {
+  asChild?: boolean;
+}) {
   const Comp = asChild ? Slot : "a";
 
   return (

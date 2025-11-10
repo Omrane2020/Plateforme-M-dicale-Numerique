@@ -1,0 +1,1 @@
+export type UserType = 'patient' | 'doctor' | 'secretary' | 'admin' | null;
