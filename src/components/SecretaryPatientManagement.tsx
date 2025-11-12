@@ -1,4 +1,4 @@
-import  { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SecretarySidebar } from './SecretarySidebar';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -15,7 +15,8 @@ import {
   Eye,
   UserPlus,
   Filter,
-  Download
+  Download,
+  RefreshCw
 } from 'lucide-react';
 import {
   Dialog,
@@ -24,121 +25,121 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+//@ts-ignore  
+import { supabase } from '../supabaseClient';
+import { toast } from 'sonner';
 
 import type { Page } from '../types/Page';
+
 interface SecretaryPatientManagementProps {
-  onNavigate: (page: Page) => void;
+  onNavigate: (page: Page, params?: Record<string, any>) => void;
   onLogout: () => void;
 }
 
+
 interface Patient {
   id: string;
-  name: string;
-  age: number;
-  gender: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth: string;
+  gender: 'M' | 'F' | 'other';
   phone: string;
   email: string;
   address: string;
-  bloodType: string;
-  lastVisit: string;
-  nextAppointment?: string;
+  city: string;
+  postal_code: string;
+  blood_type: string;
   status: 'active' | 'inactive';
+  created_at: string;
+  last_visit?: string;
+  next_appointment?: string;
 }
 
 export function SecretaryPatientManagement({ onNavigate, onLogout }: SecretaryPatientManagementProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock data - remplacer par Supabase plus tard
-  const patients: Patient[] = [
-    {
-      id: '1',
-      name: 'Marie Dubois',
-      age: 45,
-      gender: 'F',
-      phone: '06 12 34 56 78',
-      email: 'marie.dubois@email.com',
-      address: '15 Rue de la Paix, 75001 Paris',
-      bloodType: 'A+',
-      lastVisit: '2025-09-15',
-      nextAppointment: '2025-10-10',
-      status: 'active'
-    },
-    {
-      id: '2',
-      name: 'Pierre Martin',
-      age: 52,
-      gender: 'M',
-      phone: '06 23 45 67 89',
-      email: 'pierre.martin@email.com',
-      address: '28 Avenue des Champs, 75008 Paris',
-      bloodType: 'O+',
-      lastVisit: '2025-09-20',
-      nextAppointment: '2025-10-05',
-      status: 'active'
-    },
-    {
-      id: '3',
-      name: 'Sophie Lambert',
-      age: 38,
-      gender: 'F',
-      phone: '06 34 56 78 90',
-      email: 'sophie.lambert@email.com',
-      address: '7 Boulevard Voltaire, 75011 Paris',
-      bloodType: 'B+',
-      lastVisit: '2025-09-25',
-      status: 'active'
-    },
-    {
-      id: '4',
-      name: 'Jean Dupont',
-      age: 61,
-      gender: 'M',
-      phone: '06 45 67 89 01',
-      email: 'jean.dupont@email.com',
-      address: '42 Rue du Faubourg, 75010 Paris',
-      bloodType: 'AB+',
-      lastVisit: '2025-08-30',
-      nextAppointment: '2025-10-15',
-      status: 'active'
-    },
-    {
-      id: '5',
-      name: 'Anne Moreau',
-      age: 29,
-      gender: 'F',
-      phone: '06 56 78 90 12',
-      email: 'anne.moreau@email.com',
-      address: '33 Place de la République, 75003 Paris',
-      bloodType: 'A-',
-      lastVisit: '2025-09-28',
-      nextAppointment: '2025-10-12',
-      status: 'active'
-    },
-    {
-      id: '6',
-      name: 'Paul Leclerc',
-      age: 67,
-      gender: 'M',
-      phone: '06 67 89 01 23',
-      email: 'paul.leclerc@email.com',
-      address: '19 Rue de Rivoli, 75004 Paris',
-      bloodType: 'O-',
-      lastVisit: '2025-07-15',
-      status: 'inactive'
+  useEffect(() => {
+    loadPatients();
+  }, []);
+
+  const loadPatients = async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .order('last_name', { ascending: true });
+
+      if (error) throw error;
+
+      // Charger les prochains rendez-vous pour chaque patient
+      const patientsWithAppointments = await Promise.all(
+        (data || []).map(async (patient:Patient) => {
+          const { data: appointment } = await supabase
+            .from('appointments')
+            .select('appointment_date, appointment_time')
+            .eq('patient_id', patient.id)
+            .gte('appointment_date', new Date().toISOString().split('T')[0])
+            .order('appointment_date', { ascending: true })
+            .limit(1)
+            .single();
+
+          return {
+            ...patient,
+            next_appointment: appointment ? appointment.appointment_date : undefined
+          };
+        })
+      );
+
+      setPatients(patientsWithAppointments);
+    } catch (error) {
+      console.error('Erreur lors du chargement des patients:', error);
+      toast.error('Erreur lors du chargement des patients');
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  };
 
-  const filteredPatients = patients.filter(patient =>
-    patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.phone.includes(searchTerm) ||
-    patient.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const calculateAge = (dateOfBirth: string) => {
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    return age;
+  };
+
+  const getFullAddress = (patient: Patient) => {
+    return `${patient.address}, ${patient.postal_code} ${patient.city}`;
+  };
+
+  const formatLastVisit = (lastVisit?: string) => {
+    if (!lastVisit) return 'Jamais';
+    return new Date(lastVisit).toLocaleDateString('fr-FR');
+  };
+
+  const filteredPatients = patients.filter(patient => {
+    const fullName = `${patient.first_name} ${patient.last_name}`.toLowerCase();
+    return (
+      fullName.includes(searchTerm.toLowerCase()) ||
+      patient.phone.includes(searchTerm) ||
+      patient.email.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  });
 
   const activePatients = patients.filter(p => p.status === 'active').length;
+  
   const recentPatients = patients.filter(p => {
-    const lastVisit = new Date(p.lastVisit);
+    if (!p.last_visit) return false;
+    const lastVisit = new Date(p.last_visit);
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     return lastVisit >= thirtyDaysAgo;
@@ -148,6 +149,54 @@ export function SecretaryPatientManagement({ onNavigate, onLogout }: SecretaryPa
     setSelectedPatient(patient);
     setShowDetailsDialog(true);
   };
+
+  const exportPatients = async () => {
+    try {
+      const csvContent = [
+        ['Nom', 'Prénom', 'Email', 'Téléphone', 'Adresse', 'Groupe sanguin', 'Statut'],
+        ...patients.map(patient => [
+          patient.last_name,
+          patient.first_name,
+          patient.email,
+          patient.phone,
+          getFullAddress(patient),
+          patient.blood_type || 'Non renseigné',
+          patient.status === 'active' ? 'Actif' : 'Inactif'
+        ])
+      ].map(row => row.join(',')).join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `patients-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      toast.success('Liste des patients exportée avec succès');
+    } catch (error) {
+      console.error('Erreur lors de l\'export:', error);
+      toast.error('Erreur lors de l\'export');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen bg-slate-50">
+        <SecretarySidebar 
+          onNavigate={onNavigate} 
+          onLogout={onLogout} 
+          currentPage="secretary-patient-management"
+        />
+        <div className="flex-1 p-8 flex items-center justify-center">
+          <div className="text-center">
+            <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+            <p className="text-slate-600">Chargement des patients...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -166,13 +215,19 @@ export function SecretaryPatientManagement({ onNavigate, onLogout }: SecretaryPa
               Gérez les informations et coordonnées des patients
             </p>
           </div>
-          <Button 
-            onClick={() => onNavigate('add-patient')}
-            className="bg-green-600 hover:bg-green-700"
-          >
-            <UserPlus className="h-4 w-4 mr-2" />
-            Nouveau Patient
-          </Button>
+          <div className="flex space-x-3">
+            <Button variant="outline" onClick={loadPatients}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Actualiser
+            </Button>
+            <Button 
+              onClick={() => onNavigate('add-patient')}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Nouveau Patient
+            </Button>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -217,8 +272,15 @@ export function SecretaryPatientManagement({ onNavigate, onLogout }: SecretaryPa
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-slate-600 mb-1">Nouveaux</p>
-                  <p className="text-2xl text-slate-800">8</p>
+                  <p className="text-sm text-slate-600 mb-1">Nouveaux (30j)</p>
+                  <p className="text-2xl text-slate-800">
+                    {patients.filter(p => {
+                      const created = new Date(p.created_at);
+                      const thirtyDaysAgo = new Date();
+                      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                      return created >= thirtyDaysAgo;
+                    }).length}
+                  </p>
                 </div>
                 <UserPlus className="h-8 w-8 text-orange-600" />
               </div>
@@ -243,7 +305,11 @@ export function SecretaryPatientManagement({ onNavigate, onLogout }: SecretaryPa
                 <Filter className="h-4 w-4 mr-2" />
                 Filtres
               </Button>
-              <Button variant="outline" className="border-green-600 text-green-600 hover:bg-green-50">
+              <Button 
+                variant="outline" 
+                className="border-green-600 text-green-600 hover:bg-green-50"
+                onClick={exportPatients}
+              >
                 <Download className="h-4 w-4 mr-2" />
                 Exporter
               </Button>
@@ -260,82 +326,110 @@ export function SecretaryPatientManagement({ onNavigate, onLogout }: SecretaryPa
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {filteredPatients.map((patient) => (
-                <div 
-                  key={patient.id}
-                  className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
-                >
-                  <div className="flex items-center space-x-4 flex-1">
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white">
-                      {patient.name.split(' ').map(n => n[0]).join('')}
+              {filteredPatients.map((patient) => {
+                const age = calculateAge(patient.date_of_birth);
+                const fullName = `${patient.first_name} ${patient.last_name}`;
+                
+                return (
+                  <div 
+                    key={patient.id}
+                    className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
+                  >
+                    <div className="flex items-center space-x-4 flex-1">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                        {patient.first_name[0]}{patient.last_name[0]}
+                      </div>
+                      
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-1">
+                          <h3 className="text-slate-800">{fullName}</h3>
+                          <span className="text-slate-600 text-sm">{age} ans</span>
+                          <Badge variant="secondary" className={
+                            patient.status === 'active' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-gray-100 text-gray-800'
+                          }>
+                            {patient.status === 'active' ? 'Actif' : 'Inactif'}
+                          </Badge>
+                        </div>
+                        
+                        <div className="flex items-center space-x-4 text-sm text-slate-600">
+                          <span className="flex items-center">
+                            <Phone className="h-3 w-3 mr-1" />
+                            {patient.phone || 'Non renseigné'}
+                          </span>
+                          <span className="flex items-center">
+                            <Mail className="h-3 w-3 mr-1" />
+                            {patient.email}
+                          </span>
+                          <span className="flex items-center">
+                            <Calendar className="h-3 w-3 mr-1" />
+                            Dernière visite: {formatLastVisit(patient.last_visit)}
+                          </span>
+                        </div>
+                        
+                        {patient.next_appointment && (
+                          <div className="mt-1 text-xs text-green-600">
+                            Prochain RDV: {new Date(patient.next_appointment).toLocaleDateString('fr-FR')}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-1">
-                        <h3 className="text-slate-800">{patient.name}</h3>
-                        <Badge variant="secondary" className={
-                          patient.status === 'active' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-800'
-                        }>
-                          {patient.status === 'active' ? 'Actif' : 'Inactif'}
-                        </Badge>
-                      </div>
-                      
-                      <div className="flex items-center space-x-4 text-sm text-slate-600">
-                        <span className="flex items-center">
-                          <Phone className="h-3 w-3 mr-1" />
-                          {patient.phone}
-                        </span>
-                        <span className="flex items-center">
-                          <Mail className="h-3 w-3 mr-1" />
-                          {patient.email}
-                        </span>
-                        <span className="flex items-center">
-                          <Calendar className="h-3 w-3 mr-1" />
-                          Dernière visite: {new Date(patient.lastVisit).toLocaleDateString('fr-FR')}
-                        </span>
-                      </div>
-                      
-                      {patient.nextAppointment && (
-                        <div className="mt-1 text-xs text-green-600">
-                          Prochain RDV: {new Date(patient.nextAppointment).toLocaleDateString('fr-FR')}
-                        </div>
-                      )}
+                    <div className="flex items-center space-x-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                        onClick={() => handleViewDetails(patient)}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Voir
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="border-green-600 text-green-600 hover:bg-green-50"
+                        onClick={() => onNavigate('edit-patient', { patientId: patient.id })}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Modifier
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="border-purple-600 text-purple-600 hover:bg-purple-50"
+                        onClick={() => onNavigate('secretary-appointments', { patientId: patient.id })}
+                      >
+                        <Calendar className="h-4 w-4 mr-1" />
+                        RDV
+                      </Button>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      className="border-blue-600 text-blue-600 hover:bg-blue-50"
-                      onClick={() => handleViewDetails(patient)}
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      Voir
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      className="border-green-600 text-green-600 hover:bg-green-50"
-                    >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Modifier
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      className="border-purple-600 text-purple-600 hover:bg-purple-50"
-                      onClick={() => onNavigate('secretary-appointments')}
-                    >
-                      <Calendar className="h-4 w-4 mr-1" />
-                      RDV
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
+
+            {filteredPatients.length === 0 && (
+              <div className="text-center py-12">
+                <Users className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                <h3 className="text-lg text-slate-600 mb-2">
+                  {searchTerm ? 'Aucun patient trouvé' : 'Aucun patient'}
+                </h3>
+                <p className="text-slate-500 mb-4">
+                  {searchTerm 
+                    ? 'Aucun patient ne correspond à votre recherche'
+                    : 'Commencez par ajouter votre premier patient'
+                  }
+                </p>
+                {!searchTerm && (
+                  <Button onClick={() => onNavigate('add-patient')}>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Ajouter un patient
+                  </Button>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -352,12 +446,18 @@ export function SecretaryPatientManagement({ onNavigate, onLogout }: SecretaryPa
             {selectedPatient && (
               <div className="space-y-6 py-4">
                 <div className="flex items-center space-x-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xl">
-                    {selectedPatient.name.split(' ').map(n => n[0]).join('')}
+                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xl font-semibold">
+                    {selectedPatient.first_name[0]}{selectedPatient.last_name[0]}
                   </div>
                   <div>
-                    <h3 className="text-2xl text-slate-800">{selectedPatient.name}</h3>
-                    <p className="text-slate-600">{selectedPatient.age} ans • {selectedPatient.gender === 'M' ? 'Homme' : 'Femme'}</p>
+                    <h3 className="text-2xl text-slate-800">
+                      {selectedPatient.first_name} {selectedPatient.last_name}
+                    </h3>
+                    <p className="text-slate-600">
+                      {calculateAge(selectedPatient.date_of_birth)} ans • 
+                      {selectedPatient.gender === 'M' ? ' Homme' : 
+                       selectedPatient.gender === 'F' ? ' Femme' : ' Autre'}
+                    </p>
                   </div>
                 </div>
 
@@ -367,7 +467,7 @@ export function SecretaryPatientManagement({ onNavigate, onLogout }: SecretaryPa
                       <p className="text-sm text-slate-600 mb-1">Téléphone</p>
                       <div className="flex items-center">
                         <Phone className="h-4 w-4 mr-2 text-slate-500" />
-                        <p className="text-slate-800">{selectedPatient.phone}</p>
+                        <p className="text-slate-800">{selectedPatient.phone || 'Non renseigné'}</p>
                       </div>
                     </div>
                     
@@ -383,26 +483,35 @@ export function SecretaryPatientManagement({ onNavigate, onLogout }: SecretaryPa
                       <p className="text-sm text-slate-600 mb-1">Adresse</p>
                       <div className="flex items-start">
                         <MapPin className="h-4 w-4 mr-2 text-slate-500 mt-0.5" />
-                        <p className="text-slate-800">{selectedPatient.address}</p>
+                        <p className="text-slate-800">{getFullAddress(selectedPatient)}</p>
                       </div>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-600 mb-1">Date de naissance</p>
+                      <p className="text-slate-800">
+                        {new Date(selectedPatient.date_of_birth).toLocaleDateString('fr-FR')}
+                      </p>
                     </div>
                   </div>
 
                   <div className="space-y-4">
                     <div>
                       <p className="text-sm text-slate-600 mb-1">Groupe sanguin</p>
-                      <p className="text-slate-800">{selectedPatient.bloodType}</p>
+                      <p className="text-slate-800">{selectedPatient.blood_type || 'Non renseigné'}</p>
                     </div>
                     
                     <div>
                       <p className="text-sm text-slate-600 mb-1">Dernière visite</p>
-                      <p className="text-slate-800">{new Date(selectedPatient.lastVisit).toLocaleDateString('fr-FR')}</p>
+                      <p className="text-slate-800">{formatLastVisit(selectedPatient.last_visit)}</p>
                     </div>
                     
-                    {selectedPatient.nextAppointment && (
+                    {selectedPatient.next_appointment && (
                       <div>
                         <p className="text-sm text-slate-600 mb-1">Prochain rendez-vous</p>
-                        <p className="text-green-600">{new Date(selectedPatient.nextAppointment).toLocaleDateString('fr-FR')}</p>
+                        <p className="text-green-600">
+                          {new Date(selectedPatient.next_appointment).toLocaleDateString('fr-FR')}
+                        </p>
                       </div>
                     )}
                     
@@ -422,6 +531,10 @@ export function SecretaryPatientManagement({ onNavigate, onLogout }: SecretaryPa
                 <div className="flex space-x-3 pt-4 border-t">
                   <Button 
                     className="flex-1 bg-green-600 hover:bg-green-700"
+                    onClick={() => {
+                      setShowDetailsDialog(false);
+                      onNavigate('edit-patient', { patientId: selectedPatient.id });
+                    }}
                   >
                     <Edit className="h-4 w-4 mr-2" />
                     Modifier les informations
@@ -430,7 +543,7 @@ export function SecretaryPatientManagement({ onNavigate, onLogout }: SecretaryPa
                     className="flex-1 bg-blue-600 hover:bg-blue-700"
                     onClick={() => {
                       setShowDetailsDialog(false);
-                      onNavigate('secretary-appointments');
+                      onNavigate('secretary-appointments', { patientId: selectedPatient.id });
                     }}
                   >
                     <Calendar className="h-4 w-4 mr-2" />

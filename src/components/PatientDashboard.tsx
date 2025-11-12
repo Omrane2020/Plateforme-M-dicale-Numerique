@@ -15,88 +15,169 @@ import {
   Plus,
   MessageSquare,
   History,
-
+  Loader
 } from 'lucide-react';
-
+import { useState, useEffect } from 'react';
+//@ts-ignore
+import { supabase } from '../supabaseClient';
 import type { Page } from '../types/Page';
+
 interface PatientDashboardProps {
   onNavigate: (page: Page) => void;
   onLogout: () => void;
 }
 
+interface Patient {
+  id: string;
+  name: string;
+  date_of_birth: string;
+  email: string;
+  phone: string;
+  address: string;
+  blood_type: string;
+  allergies: string[];
+}
+
+interface Appointment {
+  id: string;
+  date: string;
+  time: string;
+  doctor: string;
+  specialty: string;
+  type: string;
+  status: 'upcoming' | 'completed' | 'cancelled';
+  location: string;
+}
+
+interface Medication {
+  id: string;
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  status: string;
+}
+
+interface MedicalRecord {
+  id: string;
+  visit_date: string;
+  doctor: string;
+  type: string;
+  description: string;
+  prescription: string;
+}
+
 export function PatientDashboard({ onNavigate, onLogout }: PatientDashboardProps) {
-  const patientInfo = {
-    name: 'Marie Dubois',
-    age: 45,
-    email: 'marie.dubois@email.com',
-    phone: '+33 1 23 45 67 89',
-    address: '12 rue de la Paix, 75001 Paris',
-    bloodType: 'A+',
-    allergies: ['Pénicilline', 'Arachides']
+  const [patientInfo, setPatientInfo] = useState<Patient | null>(null);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [medicalHistory, setMedicalHistory] = useState<MedicalRecord[]>([]);
+  const [currentMedications, setCurrentMedications] = useState<Medication[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchPatientData();
+  }, []);
+
+  const fetchPatientData = async () => {
+    try {
+      setLoading(true);
+      
+      // Récupérer l'utilisateur connecté
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        onLogout();
+        return;
+      }
+
+      // Récupérer les informations du patient
+      const { data: patientData, error: patientError } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (patientError) throw patientError;
+      setPatientInfo(patientData);
+
+      // Récupérer les rendez-vous
+      const { data: appointmentsData, error: appointmentsError } = await supabase
+        .from('appointments')
+        .select(`
+          *,
+          doctors (name, specialty)
+        `)
+        .eq('patient_id', patientData.id)
+        .order('appointment_date', { ascending: true });
+
+      if (appointmentsError) throw appointmentsError;
+
+      const formattedAppointments: Appointment[] = appointmentsData?.map((apt: any )=> ({
+        id: apt.id,
+        date: apt.appointment_date,
+        time: apt.appointment_time,
+        doctor: apt.doctors.name,
+        specialty: apt.doctors.specialty,
+        type: apt.type,
+        status: apt.status as 'upcoming' | 'completed' | 'cancelled',
+        location: apt.location
+      })) || [];
+
+      setAppointments(formattedAppointments);
+
+      // Récupérer l'historique médical
+      const { data: historyData, error: historyError } = await supabase
+        .from('medical_history')
+        .select(`
+          *,
+          doctors (name),
+          prescriptions (notes)
+        `)
+        .eq('patient_id', patientData.id)
+        .order('visit_date', { ascending: false })
+        .limit(3);
+
+      if (historyError) throw historyError;
+
+      const formattedHistory: MedicalRecord[] = historyData?.map((record: any )=> ({
+        id: record.id,
+        visit_date: record.visit_date,
+        doctor: record.doctors.name,
+        type: record.type,
+        description: record.description,
+        prescription: record.prescriptions?.notes || ''
+      })) || [];
+
+      setMedicalHistory(formattedHistory);
+
+      // Récupérer les médicaments actuels
+      const { data: medicationsData, error: medicationsError } = await supabase
+        .from('prescriptions')
+        .select(`
+          *,
+          medications (name)
+        `)
+        .eq('patient_id', patientData.id)
+        .eq('status', 'active');
+
+      if (medicationsError) throw medicationsError;
+
+      const formattedMedications: Medication[] = medicationsData?.map((prescription:any )=> ({
+        id: prescription.id,
+        name: prescription.medications.name,
+        dosage: prescription.dosage,
+        frequency: prescription.frequency,
+        duration: prescription.duration || 'Traitement continu',
+        status: prescription.status
+      })) || [];
+
+      setCurrentMedications(formattedMedications);
+
+    } catch (error) {
+      console.error('Erreur lors du chargement des données:', error);
+    } finally {
+      setLoading(false);
+    }
   };
-
-  const appointments = [
-    {
-      id: '1',
-      date: '2024-01-22',
-      time: '14:00',
-      doctor: 'Dr. Pierre Martin',
-      specialty: 'Cardiologie',
-      type: 'Suivi traitement',
-      status: 'upcoming' as const,
-      location: 'Cabinet médical - 15 rue de la Santé'
-    },
-    {
-      id: '2',
-      date: '2024-02-15',
-      time: '10:30',
-      doctor: 'Dr. Sophie Lambert',
-      specialty: 'Médecine générale',
-      type: 'Consultation de routine',
-      status: 'upcoming' as const,
-      location: 'Clinique des Champs'
-    },
-    {
-      id: '3',
-      date: '2024-01-15',
-      time: '09:00',
-      doctor: 'Dr. Pierre Martin',
-      specialty: 'Cardiologie',
-      type: 'Contrôle tension',
-      status: 'completed' as const,
-      location: 'Cabinet médical - 15 rue de la Santé'
-    }
-  ];
-
-  const medicalHistory = [
-    {
-      date: '2024-01-15',
-      doctor: 'Dr. Pierre Martin',
-      type: 'Consultation',
-      description: 'Contrôle de la tension artérielle - Résultats normaux',
-      prescription: 'Continuer le traitement actuel'
-    },
-    {
-      date: '2023-12-20',
-      doctor: 'Dr. Sophie Lambert',
-      type: 'Bilan sanguin',
-      description: 'Analyses complètes - Cholestérol légèrement élevé',
-      prescription: 'Régime alimentaire adapté'
-    },
-    {
-      date: '2023-11-10',
-      doctor: 'Dr. Pierre Martin',
-      type: 'Consultation',
-      description: 'Suivi traitement hypertension',
-      prescription: 'Ajustement posologie'
-    }
-  ];
-
-  const currentMedications = [
-    { name: 'Amlodipine', dosage: '5mg', frequency: '1 fois/jour', duration: 'Traitement continu' },
-    { name: 'Lisinopril', dosage: '10mg', frequency: '1 fois/jour', duration: 'Traitement continu' },
-    { name: 'Aspirine', dosage: '75mg', frequency: '1 fois/jour', duration: 'Traitement continu' }
-  ];
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -120,7 +201,47 @@ export function PatientDashboard({ onNavigate, onLogout }: PatientDashboardProps
     });
   };
 
-  const upcomingAppointments = appointments.filter(apt => apt.status === 'upcoming');
+  const calculateAge = (dateOfBirth: string) => {
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    return age;
+  };
+
+  const upcomingAppointments = appointments.filter((apt:Appointment) => apt.status === 'upcoming');
+  const recentAppointments = appointments.filter((apt: Appointment) => apt.status === 'completed').slice(0, 1);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="h-8 w-8 animate-spin mx-auto text-blue-600" />
+          <p className="mt-2 text-slate-600">Chargement de vos données...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!patientInfo) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl text-slate-800 mb-2">Profil non trouvé</h2>
+          <p className="text-slate-600 mb-4">Veuillez contacter l'administrateur</p>
+          <Button onClick={onLogout}>Se déconnecter</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const patientAge = calculateAge(patientInfo.date_of_birth);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -159,7 +280,9 @@ export function PatientDashboard({ onNavigate, onLogout }: PatientDashboardProps
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-slate-600 mb-1">Médecins traitants</p>
-                  <p className="text-2xl text-slate-800">2</p>
+                  <p className="text-2xl text-slate-800">
+                    {[...new Set(appointments.map(apt => apt.doctor))].length}
+                  </p>
                 </div>
                 <User className="h-8 w-8 text-green-600" />
               </div>
@@ -183,7 +306,9 @@ export function PatientDashboard({ onNavigate, onLogout }: PatientDashboardProps
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-slate-600 mb-1">Dernière visite</p>
-                  <p className="text-2xl text-slate-800">3j</p>
+                  <p className="text-2xl text-slate-800">
+                    {recentAppointments.length > 0 ? 'Récente' : 'Aucune'}
+                  </p>
                 </div>
                 <Clock className="h-8 w-8 text-purple-600" />
               </div>
@@ -207,7 +332,7 @@ export function PatientDashboard({ onNavigate, onLogout }: PatientDashboardProps
                     <User className="h-12 w-12 text-blue-600" />
                   </div>
                   <h3 className="text-xl text-slate-800 mb-1">{patientInfo.name}</h3>
-                  <p className="text-slate-600">{patientInfo.age} ans</p>
+                  <p className="text-slate-600">{patientAge} ans</p>
                 </div>
                 
                 <div className="space-y-3 text-sm">
@@ -222,8 +347,8 @@ export function PatientDashboard({ onNavigate, onLogout }: PatientDashboardProps
                   <div className="pt-3 border-t border-slate-200">
                     <p className="text-slate-600 mb-2">Informations médicales :</p>
                     <div className="space-y-1">
-                      <p><span className="text-slate-600">Groupe sanguin :</span> {patientInfo.bloodType}</p>
-                      <p><span className="text-slate-600">Allergies :</span> {patientInfo.allergies.join(', ')}</p>
+                      <p><span className="text-slate-600">Groupe sanguin :</span> {patientInfo.blood_type}</p>
+                      <p><span className="text-slate-600">Allergies :</span> {patientInfo.allergies?.join(', ') || 'Aucune connue'}</p>
                     </div>
                   </div>
                 </div>
@@ -293,34 +418,47 @@ export function PatientDashboard({ onNavigate, onLogout }: PatientDashboardProps
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {upcomingAppointments.map((appointment) => (
-                    <div key={appointment.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                      <div className="flex items-center space-x-4">
-                        <div className="bg-blue-100 p-3 rounded-full">
-                          <Calendar className="h-6 w-6 text-blue-600" />
+                  {upcomingAppointments.length > 0 ? (
+                    upcomingAppointments.map((appointment) => (
+                      <div key={appointment.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                        <div className="flex items-center space-x-4">
+                          <div className="bg-blue-100 p-3 rounded-full">
+                            <Calendar className="h-6 w-6 text-blue-600" />
+                          </div>
+                          <div>
+                            <h4 className="text-slate-800 mb-1">{appointment.doctor}</h4>
+                            <p className="text-sm text-slate-600 mb-1">{appointment.specialty} • {appointment.type}</p>
+                            <p className="text-sm text-slate-500">
+                              {formatDate(appointment.date)} à {appointment.time}
+                            </p>
+                            <p className="text-xs text-slate-500">{appointment.location}</p>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="text-slate-800 mb-1">{appointment.doctor}</h4>
-                          <p className="text-sm text-slate-600 mb-1">{appointment.specialty} • {appointment.type}</p>
-                          <p className="text-sm text-slate-500">
-                            {formatDate(appointment.date)} à {appointment.time}
-                          </p>
-                          <p className="text-xs text-slate-500">{appointment.location}</p>
+                        <div className="text-right">
+                          {getStatusBadge(appointment.status)}
+                          <div className="mt-2 flex space-x-2">
+                            <Button size="sm" variant="outline">
+                              <Phone className="h-3 w-3" />
+                            </Button>
+                            <Button size="sm" variant="outline">
+                              <MessageSquare className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        {getStatusBadge(appointment.status)}
-                        <div className="mt-2 flex space-x-2">
-                          <Button size="sm" variant="outline">
-                            <Phone className="h-3 w-3" />
-                          </Button>
-                          <Button size="sm" variant="outline">
-                            <MessageSquare className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <Calendar className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+                      <p className="text-slate-600">Aucun rendez-vous à venir</p>
+                      <Button 
+                        onClick={() => onNavigate('request-appointment')}
+                        className="mt-2 bg-blue-600 hover:bg-blue-700"
+                      >
+                        Prendre un rendez-vous
+                      </Button>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -335,23 +473,30 @@ export function PatientDashboard({ onNavigate, onLogout }: PatientDashboardProps
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {currentMedications.map((medication, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                      <div>
-                        <h4 className="text-slate-800 mb-1">{medication.name}</h4>
-                        <p className="text-sm text-slate-600">
-                          {medication.dosage} • {medication.frequency}
-                        </p>
-                        <p className="text-xs text-slate-500">{medication.duration}</p>
+                  {currentMedications.length > 0 ? (
+                    currentMedications.map((medication) => (
+                      <div key={medication.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                        <div>
+                          <h4 className="text-slate-800 mb-1">{medication.name}</h4>
+                          <p className="text-sm text-slate-600">
+                            {medication.dosage} • {medication.frequency}
+                          </p>
+                          <p className="text-xs text-slate-500">{medication.duration}</p>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <Button size="sm" variant="outline">
+                            <AlertCircle className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                        <Button size="sm" variant="outline">
-                          <AlertCircle className="h-3 w-3" />
-                        </Button>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <Heart className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+                      <p className="text-slate-600">Aucun traitement actif</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -366,23 +511,30 @@ export function PatientDashboard({ onNavigate, onLogout }: PatientDashboardProps
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {medicalHistory.slice(0, 3).map((record, index) => (
-                    <div key={index} className="p-4 border-l-4 border-blue-600 bg-blue-50 rounded-r-lg">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="text-slate-800">{record.type}</h4>
-                        <span className="text-sm text-slate-600">
-                          {new Date(record.date).toLocaleDateString('fr-FR')}
-                        </span>
+                  {medicalHistory.length > 0 ? (
+                    medicalHistory.map((record) => (
+                      <div key={record.id} className="p-4 border-l-4 border-blue-600 bg-blue-50 rounded-r-lg">
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="text-slate-800">{record.type}</h4>
+                          <span className="text-sm text-slate-600">
+                            {new Date(record.visit_date).toLocaleDateString('fr-FR')}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-600 mb-1">{record.doctor}</p>
+                        <p className="text-slate-700 mb-2">{record.description}</p>
+                        {record.prescription && (
+                          <p className="text-sm text-blue-800">
+                            <strong>Prescription :</strong> {record.prescription}
+                          </p>
+                        )}
                       </div>
-                      <p className="text-sm text-slate-600 mb-1">{record.doctor}</p>
-                      <p className="text-slate-700 mb-2">{record.description}</p>
-                      {record.prescription && (
-                        <p className="text-sm text-blue-800">
-                          <strong>Prescription :</strong> {record.prescription}
-                        </p>
-                      )}
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <FileText className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+                      <p className="text-slate-600">Aucun historique médical</p>
                     </div>
-                  ))}
+                  )}
                 </div>
                 <div className="mt-4 text-center">
                   <Button 

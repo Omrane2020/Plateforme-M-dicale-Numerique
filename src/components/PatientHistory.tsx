@@ -1,4 +1,4 @@
-import  { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Header } from './Header';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -20,9 +20,13 @@ import {
   User,
   Phone,
   Mail,
+  Loader,
+  AlertCircle
 } from 'lucide-react';
-
+//@ts-ignore
+import { supabase } from '../supabaseClient';
 import type { Page } from '../types/Page';
+
 interface PatientHistoryProps {
   onNavigate: (page: Page) => void;
   onLogout: () => void;
@@ -30,17 +34,30 @@ interface PatientHistoryProps {
 
 interface MedicalRecord {
   id: string;
-  date: string;
-  time: string;
+  visit_date: string;
+  visit_time: string;
   doctor: string;
+  doctor_specialty: string;
   type: 'consultation' | 'prescription' | 'analysis' | 'surgery' | 'follow-up';
   diagnosis: string;
   treatment: string;
   notes: string;
   prescriptions: string[];
-  nextAppointment?: string;
+  next_appointment_date?: string;
   status: 'completed' | 'cancelled' | 'no-show';
   documents: string[];
+}
+
+interface PatientInfo {
+  id: string;
+  name: string;
+  date_of_birth: string;
+  email: string;
+  phone: string;
+  address: string;
+  blood_type: string;
+  allergies: string[];
+  emergency_contact?: string;
 }
 
 export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
@@ -48,90 +65,119 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterDate, setFilterDate] = useState<string>('all');
   const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
+  const [patientInfo, setPatientInfo] = useState<PatientInfo | null>(null);
+  const [medicalRecords, setMedicalRecords] = useState<MedicalRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalConsultations: 0,
+    lastVisit: '',
+    activePrescriptions: 0,
+    nextAppointment: ''
+  });
 
-  // Mock patient data
-  const patientInfo = {
-    name: 'Marie Dubois',
-    age: 45,
-    email: 'marie.dubois@email.com',
-    phone: '06 12 34 56 78',
-    address: '123 Rue de la Santé, 75014 Paris',
-    bloodType: 'A+',
-    allergies: ['Pénicilline', 'Arachides'],
-    emergencyContact: 'Pierre Dubois - 06 23 45 67 89'
-  };
+  useEffect(() => {
+    fetchPatientData();
+  }, []);
 
-  // Mock medical history data
-  const medicalRecords: MedicalRecord[] = [
-    {
-      id: '1',
-      date: '2024-01-18',
-      time: '09:30',
-      doctor: 'Dr. Martin',
-      type: 'consultation',
-      diagnosis: 'Hypertension artérielle légère',
-      treatment: 'Modification du mode de vie, surveillance tensionnelle',
-      notes: 'Tension stable. Continuer les mesures hygiéno-diététiques.',
-      prescriptions: ['Amlodipine 5mg - 1cp/jour', 'Surveillance tensionnelle quotidienne'],
-      nextAppointment: '2024-04-18',
-      status: 'completed',
-      documents: ['Ordonnance', 'Recommandations diététiques']
-    },
-    {
-      id: '2',
-      date: '2024-01-05',
-      time: '14:00',
-      doctor: 'Dr. Martin',
-      type: 'analysis',
-      diagnosis: 'Bilan sanguin de routine',
-      treatment: 'Prise de sang, analyses biologiques',
-      notes: 'Résultats dans les normes. Légère carence en vitamine D.',
-      prescriptions: ['Vitamine D3 - 1 ampoule/mois'],
-      status: 'completed',
-      documents: ['Résultats analyses', 'Ordonnance vitamine D']
-    },
-    {
-      id: '3',
-      date: '2023-12-20',
-      time: '10:15',
-      doctor: 'Dr. Martin',
-      type: 'consultation',
-      diagnosis: 'Grippe saisonnière',
-      treatment: 'Repos, hydratation, antipyrétiques',
-      notes: 'Symptômes grippaux classiques. Évolution favorable.',
-      prescriptions: ['Paracétamol 1g - 3 fois/jour', 'Repos pendant 5 jours'],
-      status: 'completed',
-      documents: ['Arrêt de travail', 'Ordonnance']
-    },
-    {
-      id: '4',
-      date: '2023-12-01',
-      time: '11:30',
-      doctor: 'Dr. Martin',
-      type: 'follow-up',
-      diagnosis: 'Suivi hypertension',
-      treatment: 'Contrôle tensionnel, ajustement traitement',
-      notes: 'Bonne observance du traitement. Tension bien contrôlée.',
-      prescriptions: ['Continuation traitement actuel'],
-      nextAppointment: '2024-01-18',
-      status: 'completed',
-      documents: ['Carnet de tension']
-    },
-    {
-      id: '5',
-      date: '2023-11-15',
-      time: '16:00',
-      doctor: 'Dr. Martin',
-      type: 'consultation',
-      diagnosis: 'Consultation préventive',
-      treatment: 'Examen clinique complet, recommandations',
-      notes: 'Bon état général. Recommandations préventives données.',
-      prescriptions: [],
-      nextAppointment: '2024-05-15',
-      status: 'completed',
-      documents: ['Fiche prévention']
+  const fetchPatientData = async () => {
+    try {
+      setLoading(true);
+      
+      // Récupérer l'utilisateur connecté
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        onLogout();
+        return;
+      }
+
+      // Récupérer les informations du patient
+      const { data: patientData, error: patientError } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (patientError) throw patientError;
+      setPatientInfo(patientData);
+
+      // Récupérer l'historique médical avec les données du médecin
+      const { data: historyData, error: historyError } = await supabase
+        .from('medical_history')
+        .select(`
+          *,
+          doctors (name, specialty)
+        `)
+        .eq('patient_id', patientData.id)
+        .order('visit_date', { ascending: false });
+
+      if (historyError) throw historyError;
+
+      // Récupérer les prescriptions pour chaque enregistrement
+      const recordsWithPrescriptions = await Promise.all(
+        (historyData || []).map(async (record:any) => {
+          const { data: prescriptionsData } = await supabase
+            .from('medical_prescriptions')
+            .select('*')
+            .eq('medical_history_id', record.id);
+
+          const prescriptions = prescriptionsData?.map((prescription:any) => 
+            `${prescription.medication_name} ${prescription.dosage} - ${prescription.frequency}`
+          ) || [];
+
+          // Récupérer les documents
+          const { data: documentsData } = await supabase
+            .from('medical_documents')
+            .select('document_name')
+            .eq('medical_history_id', record.id);
+
+          const documents = documentsData?.map((doc:any) => doc.document_name) || [];
+
+          return {
+            id: record.id,
+            visit_date: record.visit_date,
+            visit_time: record.visit_time,
+            doctor: record.doctors.name,
+            doctor_specialty: record.doctors.specialty,
+            type: record.type as 'consultation' | 'prescription' | 'analysis' | 'surgery' | 'follow-up',
+            diagnosis: record.diagnosis || '',
+            treatment: record.treatment || '',
+            notes: record.notes || '',
+            prescriptions,
+            next_appointment_date: record.next_appointment_date,
+            status: record.status as 'completed' | 'cancelled' | 'no-show',
+            documents
+          };
+        })
+      );
+
+      setMedicalRecords(recordsWithPrescriptions);
+
+      // Calculer les statistiques
+      const totalConsultations = recordsWithPrescriptions.length;
+      const lastVisit = recordsWithPrescriptions[0]?.visit_date || '';
+      const activePrescriptions = recordsWithPrescriptions.reduce((count :any, record:any) => 
+        count + record.prescriptions.length, 0
+      );
+      
+      // Trouver le prochain rendez-vous
+      const today = new Date().toISOString().split('T')[0];
+      const nextAppointmentRecord = recordsWithPrescriptions
+        .filter((record:any) => record.next_appointment_date && record.next_appointment_date >= today)
+        .sort((a:any, b:any) => new Date(a.next_appointment_date!).getTime() - new Date(b.next_appointment_date!).getTime())[0];
+
+      setStats({
+        totalConsultations,
+        lastVisit,
+        activePrescriptions,
+        nextAppointment: nextAppointmentRecord?.next_appointment_date || ''
+      });
+
+    } catch (error) {
+      console.error('Erreur lors du chargement des données:', error);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   const filteredRecords = medicalRecords.filter(record => {
     const matchesSearch = record.diagnosis.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -142,9 +188,11 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
     
     let matchesDate = true;
     if (filterDate === 'recent') {
-      matchesDate = new Date(record.date) >= new Date('2024-01-01');
+      const currentYear = new Date().getFullYear();
+      matchesDate = new Date(record.visit_date).getFullYear() === currentYear;
     } else if (filterDate === 'year') {
-      matchesDate = new Date(record.date) >= new Date('2023-01-01');
+      const lastYear = new Date().getFullYear() - 1;
+      matchesDate = new Date(record.visit_date).getFullYear() >= lastYear;
     }
     
     return matchesSearch && matchesType && matchesDate;
@@ -191,30 +239,77 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
     );
   };
 
-  const stats = [
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
+
+  const calculateAge = (dateOfBirth: string) => {
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    return age;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="h-8 w-8 animate-spin mx-auto text-blue-600" />
+          <p className="mt-2 text-slate-600">Chargement de votre historique...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!patientInfo) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl text-slate-800 mb-2">Profil non trouvé</h2>
+          <p className="text-slate-600 mb-4">Veuillez contacter l'administrateur</p>
+          <Button onClick={onLogout}>Se déconnecter</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const patientAge = calculateAge(patientInfo.date_of_birth);
+
+  const displayStats = [
     {
       title: "Consultations totales",
-      value: medicalRecords.length.toString(),
+      value: stats.totalConsultations.toString(),
       icon: <Stethoscope className="h-6 w-6 text-blue-600" />,
-      change: "Depuis 2023"
+      change: "Depuis le début"
     },
     {
       title: "Dernière visite",
-      value: "18 Jan 2024",
+      value: stats.lastVisit ? formatDate(stats.lastVisit) : "Aucune",
       icon: <Calendar className="h-6 w-6 text-green-600" />,
-      change: "Dr. Martin"
+      change: stats.lastVisit ? "Dernier suivi" : "Pas de visite"
     },
     {
       title: "Prescriptions actives",
-      value: "2",
+      value: stats.activePrescriptions.toString(),
       icon: <Pill className="h-6 w-6 text-purple-600" />,
       change: "En cours"
     },
     {
       title: "Prochain RDV",
-      value: "18 Avr 2024",
+      value: stats.nextAppointment ? formatDate(stats.nextAppointment) : "Aucun",
       icon: <Clock className="h-6 w-6 text-orange-600" />,
-      change: "Programmé"
+      change: stats.nextAppointment ? "Programmé" : "À planifier"
     }
   ];
 
@@ -263,14 +358,14 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
                     <User className="h-5 w-5 text-blue-600" />
                     <div>
                       <p className="text-sm text-slate-600">Nom complet</p>
-                      <p className="text-slate-800">{patientInfo.name}, {patientInfo.age} ans</p>
+                      <p className="text-slate-800">{patientInfo.name}, {patientAge} ans</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
                     <Heart className="h-5 w-5 text-red-600" />
                     <div>
                       <p className="text-sm text-slate-600">Groupe sanguin</p>
-                      <p className="text-slate-800">{patientInfo.bloodType}</p>
+                      <p className="text-slate-800">{patientInfo.blood_type}</p>
                     </div>
                   </div>
                 </div>
@@ -296,16 +391,20 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
                   <div>
                     <p className="text-sm text-slate-600 mb-1">Allergies connues</p>
                     <div className="flex flex-wrap gap-2">
-                      {patientInfo.allergies.map((allergy, index) => (
-                        <Badge key={index} variant="secondary" className="bg-red-100 text-red-800">
-                          {allergy}
-                        </Badge>
-                      ))}
+                      {patientInfo.allergies && patientInfo.allergies.length > 0 ? (
+                        patientInfo.allergies.map((allergy, index) => (
+                          <Badge key={index} variant="secondary" className="bg-red-100 text-red-800">
+                            {allergy}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-slate-600 text-sm">Aucune allergie connue</span>
+                      )}
                     </div>
                   </div>
                   <div>
                     <p className="text-sm text-slate-600">Contact d'urgence</p>
-                    <p className="text-slate-800 text-sm">{patientInfo.emergencyContact}</p>
+                    <p className="text-slate-800 text-sm">{patientInfo.emergency_contact || 'Non renseigné'}</p>
                   </div>
                 </div>
               </div>
@@ -314,7 +413,7 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
 
           {/* Statistics */}
           <div className="grid md:grid-cols-4 gap-6 mb-8">
-            {stats.map((stat, index) => (
+            {displayStats.map((stat, index) => (
               <Card key={index} className="shadow-sm border-0">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -365,8 +464,8 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Toute la période</SelectItem>
-                <SelectItem value="recent">Récent (2024)</SelectItem>
-                <SelectItem value="year">Cette année</SelectItem>
+                <SelectItem value="recent">Récent (cette année)</SelectItem>
+                <SelectItem value="year">Cette année et dernière</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -400,8 +499,8 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
                               {getTypeBadge(record.type)}
                             </div>
                             <div className="flex items-center space-x-4 text-sm text-slate-600">
-                              <span>{new Date(record.date).toLocaleDateString('fr-FR')}</span>
-                              <span>{record.time}</span>
+                              <span>{formatDate(record.visit_date)}</span>
+                              <span>{record.visit_time}</span>
                             </div>
                           </div>
                         </div>
@@ -410,9 +509,9 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
                       
                       <div className="text-sm">
                         <p className="text-slate-600 mb-1">Diagnostic:</p>
-                        <p className="text-slate-800 mb-3">{record.diagnosis}</p>
+                        <p className="text-slate-800 mb-3">{record.diagnosis || 'Non spécifié'}</p>
                         <p className="text-slate-600 mb-1">Traitement:</p>
-                        <p className="text-slate-800">{record.treatment}</p>
+                        <p className="text-slate-800">{record.treatment || 'Non spécifié'}</p>
                       </div>
                       
                       {record.prescriptions.length > 0 && (
@@ -473,7 +572,7 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
                     <h4 className="text-slate-700 mb-2">Médecin</h4>
                     <div className="bg-slate-50 p-3 rounded-lg">
                       <p className="text-slate-800">{selectedRecord.doctor}</p>
-                      <p className="text-sm text-slate-600">Cardiologue</p>
+                      <p className="text-sm text-slate-600">{selectedRecord.doctor_specialty}</p>
                     </div>
                   </div>
                   
@@ -482,15 +581,15 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-slate-600">Date:</span>
-                        <span className="text-slate-800">{new Date(selectedRecord.date).toLocaleDateString('fr-FR')}</span>
+                        <span className="text-slate-800">{formatDate(selectedRecord.visit_date)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-600">Heure:</span>
-                        <span className="text-slate-800">{selectedRecord.time}</span>
+                        <span className="text-slate-800">{selectedRecord.visit_time}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-600">Type:</span>
-                        <span className="text-slate-800">{getTypeBadge(selectedRecord.type)}</span>
+                        <span>{getTypeBadge(selectedRecord.type)}</span>
                       </div>
                     </div>
                   </div>
@@ -498,14 +597,14 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
                   <div>
                     <h4 className="text-slate-700 mb-2">Diagnostic</h4>
                     <div className="bg-slate-50 p-3 rounded-lg">
-                      <p className="text-sm text-slate-800">{selectedRecord.diagnosis}</p>
+                      <p className="text-sm text-slate-800">{selectedRecord.diagnosis || 'Non spécifié'}</p>
                     </div>
                   </div>
                   
                   <div>
                     <h4 className="text-slate-700 mb-2">Traitement</h4>
                     <div className="bg-slate-50 p-3 rounded-lg">
-                      <p className="text-sm text-slate-800">{selectedRecord.treatment}</p>
+                      <p className="text-sm text-slate-800">{selectedRecord.treatment || 'Non spécifié'}</p>
                     </div>
                   </div>
                   
@@ -525,16 +624,16 @@ export function PatientHistory({ onNavigate, onLogout }: PatientHistoryProps) {
                   <div>
                     <h4 className="text-slate-700 mb-2">Notes du médecin</h4>
                     <div className="bg-slate-50 p-3 rounded-lg">
-                      <p className="text-sm text-slate-800">{selectedRecord.notes}</p>
+                      <p className="text-sm text-slate-800">{selectedRecord.notes || 'Aucune note'}</p>
                     </div>
                   </div>
                   
-                  {selectedRecord.nextAppointment && (
+                  {selectedRecord.next_appointment_date && (
                     <div>
                       <h4 className="text-slate-700 mb-2">Prochain RDV</h4>
                       <div className="bg-blue-50 p-3 rounded-lg">
                         <p className="text-sm text-blue-800">
-                          {new Date(selectedRecord.nextAppointment).toLocaleDateString('fr-FR')}
+                          {formatDate(selectedRecord.next_appointment_date)}
                         </p>
                       </div>
                     </div>

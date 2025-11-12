@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import  { useState, useEffect } from 'react';
 import { AdminSidebar } from './AdminSidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -39,14 +39,36 @@ import {
   Eye,
   EyeOff,
   Star,
-  Crown,
   Users,
   Shield,
   Heart,
-  DollarSign,
-  Layers
+  Layers,
+  Loader2
 } from 'lucide-react';
-import { useSubscriptions, type SubscriptionPlan,type SubscriptionFeature } from '../contexts/SubscriptionContext';
+import { toast } from 'sonner';
+//@ts-ignore
+import { supabase } from '../supabaseClient';
+
+interface SubscriptionPlan {
+  id: string;
+  name: string;
+  description: string;
+  category: 'doctor' | 'clinic' | 'patient';
+  monthlyPrice: number;
+  yearlyPrice: number;
+  popular: boolean;
+  color: 'blue' | 'green' | 'purple' | 'orange';
+  order: number;
+  active: boolean;
+  features: SubscriptionFeature[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface SubscriptionFeature {
+  name: string;
+  included: boolean;
+}
 
 interface SubscriptionManagementProps {
   onNavigate: (page: string) => void;
@@ -54,12 +76,14 @@ interface SubscriptionManagementProps {
 }
 
 export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionManagementProps) {
-  const { plans, addPlan, updatePlan, deletePlan, togglePlanStatus } = useSubscriptions();
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [filterCategory, setFilterCategory] = useState<'all' | 'doctor' | 'clinic' | 'patient'>('all');
+  const [saving, setSaving] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -76,6 +100,38 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
 
   const [newFeature, setNewFeature] = useState('');
 
+  // Charger les plans depuis Supabase
+  useEffect(() => {
+    fetchPlans();
+  }, []);
+
+  const fetchPlans = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('subscription_plans')
+        .select('*')
+        .order('order', { ascending: true });
+
+      if (error) throw error;
+
+      // Convertir les features depuis JSON si nécessaire
+      const formattedPlans = data?.map((plan:any) => ({
+        ...plan,
+        features: typeof plan.features === 'string' 
+          ? JSON.parse(plan.features) 
+          : plan.features
+      })) || [];
+
+      setPlans(formattedPlans);
+    } catch (error) {
+      console.error('Erreur lors du chargement des plans:', error);
+      toast.error('Erreur lors du chargement des plans');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOpenAddDialog = () => {
     setFormData({
       name: '',
@@ -85,7 +141,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
       yearlyPrice: 0,
       popular: false,
       color: 'blue',
-      order: 1,
+      order: (plans.length > 0 ? Math.max(...plans.map(p => p.order)) : 0) + 1,
       features: []
     });
     setIsAddDialogOpen(true);
@@ -140,38 +196,106 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
 
   const handleAddPlan = async () => {
     try {
-      // Créer un DTO sans l'ID (généré par le backend)
-      await addPlan(formData);
+      setSaving(true);
+      
+      const { data, error } = await supabase
+        .from('subscription_plans')
+        .insert([
+          {
+            ...formData,
+            active: true,
+            features: JSON.stringify(formData.features)
+          }
+        ])
+        .select();
+
+      if (error) throw error;
+
+      toast.success('Plan d\'abonnement créé avec succès');
       setIsAddDialogOpen(false);
-    } catch (error) {
+      fetchPlans();
+    } catch (error: any) {
       console.error('Erreur lors de l\'ajout du plan:', error);
-      // L'erreur est déjà gérée dans le contexte
+      toast.error(error.message || 'Erreur lors de la création du plan');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleUpdatePlan = async () => {
-    if (selectedPlan) {
-      try {
-        await updatePlan(selectedPlan.id, formData);
-        setIsEditDialogOpen(false);
-        setSelectedPlan(null);
-      } catch (error) {
-        console.error('Erreur lors de la mise à jour du plan:', error);
-        // L'erreur est déjà gérée dans le contexte
-      }
+    if (!selectedPlan) return;
+
+    try {
+      setSaving(true);
+      
+      const { error } = await supabase
+        .from('subscription_plans')
+        .update({
+          ...formData,
+          features: JSON.stringify(formData.features),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedPlan.id);
+
+      if (error) throw error;
+
+      toast.success('Plan d\'abonnement mis à jour avec succès');
+      setIsEditDialogOpen(false);
+      setSelectedPlan(null);
+      fetchPlans();
+    } catch (error: any) {
+      console.error('Erreur lors de la mise à jour du plan:', error);
+      toast.error(error.message || 'Erreur lors de la mise à jour du plan');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDeletePlan = async () => {
-    if (selectedPlan) {
-      try {
-        await deletePlan(selectedPlan.id);
-        setIsDeleteDialogOpen(false);
-        setSelectedPlan(null);
-      } catch (error) {
-        console.error('Erreur lors de la suppression du plan:', error);
-        // L'erreur est déjà gérée dans le contexte
-      }
+    if (!selectedPlan) return;
+
+    try {
+      setSaving(true);
+      
+      const { error } = await supabase
+        .from('subscription_plans')
+        .delete()
+        .eq('id', selectedPlan.id);
+
+      if (error) throw error;
+
+      toast.success('Plan d\'abonnement supprimé avec succès');
+      setIsDeleteDialogOpen(false);
+      setSelectedPlan(null);
+      fetchPlans();
+    } catch (error: any) {
+      console.error('Erreur lors de la suppression du plan:', error);
+      toast.error(error.message || 'Erreur lors de la suppression du plan');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTogglePlanStatus = async (planId: string) => {
+    try {
+      const plan = plans.find(p => p.id === planId);
+      if (!plan) return;
+
+      const { error } = await supabase
+        .from('subscription_plans')
+        .update({ 
+          active: !plan.active,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', planId);
+
+      if (error) throw error;
+
+      toast.success(`Plan ${!plan.active ? 'activé' : 'désactivé'} avec succès`);
+      fetchPlans();
+    } catch (error: any) {
+      console.error('Erreur lors du changement de statut:', error);
+      toast.error(error.message || 'Erreur lors du changement de statut');
     }
   };
 
@@ -206,6 +330,20 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
     };
     return colors[color as keyof typeof colors] || colors.blue;
   };
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-gray-50">
+        <AdminSidebar onNavigate={onNavigate} onLogout={onLogout} activePage="subscription-management" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />
+            <p className="text-gray-600">Chargement des plans d'abonnement...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -370,7 +508,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                     <div className="flex items-center space-x-2">
                       <Switch
                         checked={plan.active}
-                        onCheckedChange={() => togglePlanStatus(plan.id)}
+                        onCheckedChange={() => handleTogglePlanStatus(plan.id)}
                       />
                       <span className="text-sm">
                         {plan.active ? <Eye className="w-4 h-4 text-green-600" /> : <EyeOff className="w-4 h-4 text-gray-400" />}
@@ -474,7 +612,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                   id="monthlyPrice"
                   type="number"
                   value={formData.monthlyPrice}
-                  onChange={(e) => setFormData({ ...formData, monthlyPrice: parseFloat(e.target.value) })}
+                  onChange={(e) => setFormData({ ...formData, monthlyPrice: parseFloat(e.target.value) || 0 })}
                 />
               </div>
               <div>
@@ -483,7 +621,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                   id="yearlyPrice"
                   type="number"
                   value={formData.yearlyPrice}
-                  onChange={(e) => setFormData({ ...formData, yearlyPrice: parseFloat(e.target.value) })}
+                  onChange={(e) => setFormData({ ...formData, yearlyPrice: parseFloat(e.target.value) || 0 })}
                 />
               </div>
             </div>
@@ -512,7 +650,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                   id="order"
                   type="number"
                   value={formData.order}
-                  onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) })}
+                  onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) || 1 })}
                 />
               </div>
             </div>
@@ -570,11 +708,22 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                 setIsAddDialogOpen(false);
                 setIsEditDialogOpen(false);
               }}
+              disabled={saving}
             >
               Annuler
             </Button>
-            <Button onClick={isAddDialogOpen ? handleAddPlan : handleUpdatePlan}>
-              {isAddDialogOpen ? 'Ajouter' : 'Mettre à jour'}
+            <Button 
+              onClick={isAddDialogOpen ? handleAddPlan : handleUpdatePlan}
+              disabled={saving}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  {isAddDialogOpen ? 'Création...' : 'Mise à jour...'}
+                </>
+              ) : (
+                isAddDialogOpen ? 'Ajouter' : 'Mettre à jour'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -590,9 +739,20 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeletePlan} className="bg-red-600 hover:bg-red-700">
-              Supprimer
+            <AlertDialogCancel disabled={saving}>Annuler</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeletePlan} 
+              className="bg-red-600 hover:bg-red-700"
+              disabled={saving}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Suppression...
+                </>
+              ) : (
+                'Supprimer'
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

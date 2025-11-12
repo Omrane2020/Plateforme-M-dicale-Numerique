@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import  { useState, useEffect } from 'react';
 import { DoctorSidebar } from './DoctorSidebar';
 import { PrescriptionModule } from './PrescriptionModule';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -10,10 +10,14 @@ import {
   FileText, 
   User, 
   Calendar,
-  Plus
+  Plus,
+  Loader,
+  AlertCircle
 } from 'lucide-react';
-
+//@ts-ignore
+import { supabase } from '../supabaseClient';
 import type { Page } from '../types/Page';
+
 interface PrescriptionViewProps {
   onNavigate: (page: Page) => void;
   onLogout: () => void;
@@ -40,81 +44,117 @@ export function PrescriptionView({ onNavigate, onLogout }: PrescriptionViewProps
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showPrescriptionModule, setShowPrescriptionModule] = useState(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [doctorId, setDoctorId] = useState<string>('');
 
-  // Mock patients data
-  const patients: Patient[] = [
-    {
-      id: '1',
-      name: 'Marie Dubois',
-      age: 45,
-      currentMedications: [
-        {
-          id: '1',
-          name: 'Lisinopril',
-          dosage: '10mg',
-          frequency: '1x/jour',
-          duration: 'Traitement continu',
-          instructions: 'Le matin'
-        },
-        {
-          id: '2',
-          name: 'Amlodipine',
-          dosage: '5mg',
-          frequency: '1x/jour',
-          duration: 'Traitement continu',
-          instructions: 'Le soir'
-        }
-      ],
-      allergies: ['Pénicilline'],
-      conditions: ['Hypertension'],
-      lastVisit: '2024-01-15'
-    },
-    {
-      id: '2',
-      name: 'Pierre Martin',
-      age: 67,
-      currentMedications: [
-        {
-          id: '3',
-          name: 'Metformine',
-          dosage: '500mg',
-          frequency: '2x/jour',
-          duration: 'Traitement continu',
-          instructions: 'Pendant les repas'
-        }
-      ],
-      allergies: ['Sulfamides'],
-      conditions: ['Diabète type 2', 'Hypertension'],
-      lastVisit: '2024-01-14'
-    },
-    {
-      id: '3',
-      name: 'Sophie Lambert',
-      age: 34,
-      currentMedications: [],
-      allergies: [],
-      conditions: ['Grossesse - 2ème trimestre'],
-      lastVisit: '2024-01-13'
-    },
-    {
-      id: '4',
-      name: 'Jean Dupont',
-      age: 52,
-      currentMedications: [
-        {
-          id: '4',
-          name: 'Atorvastatine',
-          dosage: '20mg',
-          frequency: '1x/jour',
-          duration: 'Traitement continu',
-          instructions: 'Le soir'
-        }
-      ],
-      allergies: [],
-      conditions: ['Hypercholestérolémie'],
-      lastVisit: '2024-01-10'
+  useEffect(() => {
+    fetchDoctorAndPatients();
+  }, []);
+
+  const fetchDoctorAndPatients = async () => {
+    try {
+      setLoading(true);
+      
+      // Récupérer l'utilisateur connecté
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        onLogout();
+        return;
+      }
+
+      // Récupérer l'ID du docteur
+      const { data: doctorData, error: doctorError } = await supabase
+        .from('doctors')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (doctorError) throw doctorError;
+      setDoctorId(doctorData.id);
+
+      // Récupérer les patients du docteur
+      const { data: relationshipsData, error: relationshipsError } = await supabase
+        .from('doctor_patient_relationships')
+        .select(`
+          patient:patients (
+            id,
+            name,
+            date_of_birth,
+            allergies,
+            emergency_contact,
+            created_at
+          ),
+          patient_conditions (condition_name, status),
+          prescription_medications (medication_name, dosage, frequency, duration, instructions),
+          appointments (appointment_date, status)
+        `)
+        .eq('doctor_id', doctorData.id)
+        .eq('status', 'active');
+
+      if (relationshipsError) throw relationshipsError;
+
+      // Transformer les données des patients
+      const formattedPatients: Patient[] = (relationshipsData || []).map((rel:any ) => {
+        const patient = rel.patient;
+        
+        // Calculer l'âge
+        const age = patient.date_of_birth 
+          ? new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear()
+          : 0;
+
+        // Conditions actuelles
+        const conditions = (rel.patient_conditions || [])
+          .filter((cond: any) => cond.status === 'active')
+          .map((cond: any) => cond.condition_name);
+
+        // Médicaments actuels
+        const currentMedications = (rel.prescription_medications || []).map((med: any, index: number) => ({
+          id: index.toString(),
+          name: med.medication_name,
+          dosage: med.dosage || '',
+          frequency: med.frequency || '',
+          duration: med.duration || '',
+          instructions: med.instructions || ''
+        }));
+
+        // Dernière visite
+        const appointments = (rel.appointments || [])
+          .filter((apt: any) => apt.status === 'completed')
+          .sort((a: any, b: any) => new Date(b.appointment_date).getTime() - new Date(a.appointment_date).getTime());
+        
+        const lastVisit = appointments[0]?.appointment_date || patient.created_at;
+
+        // Allergies
+        const allergies = patient.allergies || [];
+
+        return {
+          id: patient.id,
+          name: patient.name,
+          age,
+          currentMedications,
+          allergies,
+          conditions,
+          lastVisit
+        };
+      });
+
+      setPatients(formattedPatients);
+
+      // Enregistrer la vue de prescription pour les statistiques
+      await supabase
+        .from('prescription_views')
+        .insert({
+          doctor_id: doctorData.id,
+          view_date: new Date().toISOString().split('T')[0]
+        });
+
+    } catch (error) {
+      console.error('Erreur lors du chargement des patients:', error);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   const filteredPatients = patients.filter(patient =>
     patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -123,9 +163,22 @@ export function PrescriptionView({ onNavigate, onLogout }: PrescriptionViewProps
     )
   );
 
-  const handlePatientSelect = (patient: Patient) => {
+  const handlePatientSelect = async (patient: Patient) => {
     setSelectedPatient(patient);
     setShowPrescriptionModule(true);
+
+    // Enregistrer la vue détaillée du patient
+    try {
+      await supabase
+        .from('prescription_views')
+        .insert({
+          doctor_id: doctorId,
+          patient_id: patient.id,
+          view_date: new Date().toISOString().split('T')[0]
+        });
+    } catch (error) {
+      console.error('Erreur lors de l\'enregistrement de la vue:', error);
+    }
   };
 
   const handleClosePrescription = () => {
@@ -160,7 +213,26 @@ export function PrescriptionView({ onNavigate, onLogout }: PrescriptionViewProps
           <PrescriptionModule 
             selectedPatient={selectedPatient}
             onClose={handleClosePrescription}
+            doctorId={doctorId}
           />
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen bg-slate-50">
+        <DoctorSidebar 
+          onNavigate={onNavigate} 
+          onLogout={onLogout} 
+          currentPage="prescription"
+        />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Loader className="h-8 w-8 animate-spin mx-auto text-blue-600 mb-4" />
+            <p className="text-slate-600">Chargement des patients...</p>
+          </div>
         </div>
       </div>
     );
@@ -183,13 +255,56 @@ export function PrescriptionView({ onNavigate, onLogout }: PrescriptionViewProps
           </p>
         </div>
 
+        {/* Stats */}
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
+          <Card className="shadow-sm border-0">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-600 mb-1">Patients total</p>
+                  <p className="text-2xl text-slate-800">{patients.length}</p>
+                </div>
+                <User className="h-8 w-8 text-blue-600" />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="shadow-sm border-0">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-600 mb-1">Sous traitement</p>
+                  <p className="text-2xl text-slate-800">
+                    {patients.filter(p => p.currentMedications.length > 0).length}
+                  </p>
+                </div>
+                <FileText className="h-8 w-8 text-green-600" />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="shadow-sm border-0">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-600 mb-1">Avec allergies</p>
+                  <p className="text-2xl text-slate-800">
+                    {patients.filter(p => p.allergies.length > 0).length}
+                  </p>
+                </div>
+                <AlertCircle className="h-8 w-8 text-red-600" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Search */}
         <Card className="shadow-sm border-0 mb-8">
           <CardContent className="p-6">
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Rechercher un patient..."
+                placeholder="Rechercher un patient par nom ou condition..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -277,21 +392,36 @@ export function PrescriptionView({ onNavigate, onLogout }: PrescriptionViewProps
 
             {filteredPatients.length === 0 && (
               <div className="text-center py-12">
-                <User className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                <h3 className="text-lg text-slate-600 mb-2">Aucun patient trouvé</h3>
-                <p className="text-slate-500 mb-4">
-                  {searchTerm 
-                    ? "Aucun patient ne correspond à votre recherche" 
-                    : "Aucun patient disponible pour prescription"
-                  }
-                </p>
-                <Button 
-                  onClick={() => onNavigate('patient-management')}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Gérer les patients
-                </Button>
+                {patients.length === 0 ? (
+                  <>
+                    <User className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                    <h3 className="text-lg text-slate-600 mb-2">Aucun patient enregistré</h3>
+                    <p className="text-slate-500 mb-4">
+                      Commencez par ajouter vos premiers patients
+                    </p>
+                    <Button 
+                      onClick={() => onNavigate('patient-management')}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Gérer les patients
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                    <h3 className="text-lg text-slate-600 mb-2">Aucun patient trouvé</h3>
+                    <p className="text-slate-500 mb-4">
+                      Aucun patient ne correspond à votre recherche
+                    </p>
+                    <Button 
+                      onClick={() => setSearchTerm('')}
+                      variant="outline"
+                    >
+                      Effacer la recherche
+                    </Button>
+                  </>
+                )}
               </div>
             )}
           </CardContent>

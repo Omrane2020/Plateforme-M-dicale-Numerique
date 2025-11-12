@@ -1,4 +1,4 @@
-import  { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AdminSidebar } from './AdminSidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -17,79 +17,327 @@ import {
   UserCheck,
   Database,
   Server,
-  Shield
+  Shield,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
+import { toast } from 'sonner';
+//@ts-ignore
+import { supabase } from '../supabaseClient';
 
 interface AdminDashboardProps {
   onNavigate: (page: string) => void;
   onLogout: () => void;
 }
 
+interface DashboardStats {
+  totalUsers: number;
+  totalDoctors: number;
+  totalSecretaries: number;
+  totalPatients: number;
+  todayAppointments: number;
+  pendingAppointments: number;
+  completedAppointments: number;
+  activeSessions: number;
+  systemHealth: number;
+}
+
+interface RecentActivity {
+  id: string;
+  type: 'login' | 'appointment' | 'prescription' | 'alert' | 'user' | 'system';
+  user: string;
+  action: string;
+  timestamp: string;
+  status: 'success' | 'warning' | 'error' | 'info';
+}
+
+interface SystemMetric {
+  label: string;
+  value: number;
+  status: 'good' | 'warning' | 'error';
+}
+
 export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
   const [selectedPeriod, setSelectedPeriod] = useState('today');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // États pour les données
+  const [stats, setStats] = useState<DashboardStats>({
+    totalUsers: 0,
+    totalDoctors: 0,
+    totalSecretaries: 0,
+    totalPatients: 0,
+    todayAppointments: 0,
+    pendingAppointments: 0,
+    completedAppointments: 0,
+    activeSessions: 0,
+    systemHealth: 0
+  });
 
-  // Données simulées pour la démo
-  const stats = {
-    totalUsers: 1247,
-    totalDoctors: 18,
-    totalSecretaries: 12,
-    totalPatients: 1217,
-    todayAppointments: 45,
-    pendingAppointments: 12,
-    completedAppointments: 33,
-    activeSessions: 23,
-    systemHealth: 98.5
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
+  const [systemMetrics, setSystemMetrics] = useState<SystemMetric[]>([]);
+
+  // Charger les données du dashboard
+  useEffect(() => {
+    fetchDashboardData();
+  }, [selectedPeriod]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      await Promise.all([
+        fetchStats(),
+        fetchRecentActivity(),
+        fetchSystemMetrics()
+      ]);
+
+    } catch (error) {
+      console.error('Erreur lors du chargement du dashboard:', error);
+      toast.error('Erreur lors du chargement des données');
+      // Charger des données par défaut en cas d'erreur
+      setDefaultData();
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const recentActivity = [
-    {
-      id: 1,
-      type: 'login',
-      user: 'Dr. Martin Dubois',
-      action: 'Connexion au système',
-      timestamp: 'Il y a 5 min',
-      status: 'success'
-    },
-    {
-      id: 2,
-      type: 'appointment',
-      user: 'Marie Secrétaire',
-      action: 'Nouveau RDV programmé',
-      timestamp: 'Il y a 12 min',
-      status: 'info'
-    },
-    {
-      id: 3,
-      type: 'prescription',
-      user: 'Dr. Sophie Laurent',
-      action: 'Prescription créée',
-      timestamp: 'Il y a 18 min',
-      status: 'success'
-    },
-    {
-      id: 4,
-      type: 'alert',
-      user: 'Système',
-      action: 'Tentative de connexion échouée',
-      timestamp: 'Il y a 25 min',
-      status: 'warning'
-    },
-    {
-      id: 5,
-      type: 'user',
-      user: 'Admin',
-      action: 'Nouveau médecin ajouté',
-      timestamp: 'Il y a 1h',
-      status: 'success'
-    }
-  ];
+  const refreshData = async () => {
+    setRefreshing(true);
+    await fetchDashboardData();
+    setRefreshing(false);
+    toast.success('Données actualisées');
+  };
 
-  const systemMetrics = [
-    { label: 'CPU', value: 45, status: 'good' },
-    { label: 'Mémoire', value: 62, status: 'warning' },
-    { label: 'Stockage', value: 78, status: 'warning' },
-    { label: 'Réseau', value: 23, status: 'good' }
-  ];
+  const fetchStats = async () => {
+    try {
+      // Récupérer les statistiques utilisateurs
+      const { count: totalUsers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+
+      const { count: totalDoctors } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_type', 'doctor');
+
+      const { count: totalSecretaries } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_type', 'secretary');
+
+      const { count: totalPatients } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_type', 'patient');
+
+      // Récupérer les statistiques rendez-vous
+      const today = new Date().toISOString().split('T')[0];
+      const { count: todayAppointments } = await supabase
+        .from('appointments')
+        .select('*', { count: 'exact', head: true })
+        .eq('appointment_date', today);
+
+      const { count: pendingAppointments } = await supabase
+        .from('appointments')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      const { count: completedAppointments } = await supabase
+        .from('appointments')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'completed');
+
+      // Récupérer les sessions actives (approximation basée sur last_login récent)
+      const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+      const { count: activeSessions } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .gte('last_login', twentyMinutesAgo);
+
+      // Santé système (calcul basé sur diverses métriques)
+      const systemHealth = await calculateSystemHealth();
+
+      setStats({
+        totalUsers: totalUsers || 0,
+        totalDoctors: totalDoctors || 0,
+        totalSecretaries: totalSecretaries || 0,
+        totalPatients: totalPatients || 0,
+        todayAppointments: todayAppointments || 0,
+        pendingAppointments: pendingAppointments || 0,
+        completedAppointments: completedAppointments || 0,
+        activeSessions: activeSessions || 0,
+        systemHealth
+      });
+
+    } catch (error) {
+      console.error('Erreur stats:', error);
+      throw error;
+    }
+  };
+
+  const fetchRecentActivity = async () => {
+    try {
+      // Récupérer les activités récentes depuis différentes sources
+      const [loginsData, appointmentsData, systemData] = await Promise.all([
+        // Connexions récentes
+        supabase
+          .from('profiles')
+          .select('first_name, last_name, last_login')
+          .not('last_login', 'is', null)
+          .order('last_login', { ascending: false })
+          .limit(5),
+
+        // Rendez-vous récents
+        supabase
+          .from('appointments')
+          .select('created_at, patients:profiles!appointments_patient_id_fkey(first_name, last_name)')
+          .order('created_at', { ascending: false })
+          .limit(5),
+
+        // Notifications système
+        supabase
+          .from('system_events')
+          .select('event_type, description, created_at')
+          .order('created_at', { ascending: false })
+          .limit(5)
+      ]);
+
+      const activities: RecentActivity[] = [];
+
+      // Ajouter les connexions
+      loginsData.data?.forEach((login:any) => {
+        activities.push({
+          id: `login-${login.last_login}`,
+          type: 'login',
+          user: `${login.first_name} ${login.last_name}`,
+          action: 'Connexion au système',
+          timestamp: formatTimeAgo(login.last_login!),
+          status: 'success'
+        });
+      });
+
+      // Ajouter les rendez-vous
+      appointmentsData.data?.forEach((apt:any) => {
+        activities.push({
+          id: `appointment-${apt.created_at}`,
+          type: 'appointment',
+          user: `${apt.patients?.first_name} ${apt.patients?.last_name}`,
+          action: 'Nouveau RDV programmé',
+          timestamp: formatTimeAgo(apt.created_at),
+          status: 'info'
+        });
+      });
+
+      // Ajouter les événements système
+      systemData.data?.forEach((event:any) => {
+        activities.push({
+          id: `system-${event.created_at}`,
+          type: 'system',
+          user: 'Système',
+          action: event.description,
+          timestamp: formatTimeAgo(event.created_at),
+          status: event.event_type.includes('error') ? 'warning' : 'info'
+        });
+      });
+
+      // Trier par timestamp et prendre les 5 plus récents
+      setRecentActivity(activities.sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      ).slice(0, 5));
+
+    } catch (error) {
+      console.error('Erreur activités:', error);
+      throw error;
+    }
+  };
+
+  const fetchSystemMetrics = async () => {
+    try {
+      // Métriques simulées - dans un vrai projet, ces données viendraient d'un monitoring système
+      const metrics: SystemMetric[] = [
+        { label: 'CPU', value: Math.floor(Math.random() * 30) + 20, status: 'good' },
+        { label: 'Mémoire', value: Math.floor(Math.random() * 40) + 40, status: 'warning' },
+        { label: 'Stockage', value: Math.floor(Math.random() * 30) + 60, status: 'warning' },
+        { label: 'Réseau', value: Math.floor(Math.random() * 20) + 10, status: 'good' }
+      ];
+
+      setSystemMetrics(metrics);
+
+    } catch (error) {
+      console.error('Erreur métriques:', error);
+      throw error;
+    }
+  };
+
+  const calculateSystemHealth = async (): Promise<number> => {
+    try {
+      // Vérifier la santé de différentes composantes du système
+      const checks = await Promise.all([
+        // Vérifier la connexion à la base de données
+        supabase.from('profiles').select('count').limit(1),
+        // Vérifier les tables essentielles
+        supabase.from('appointments').select('count').limit(1),
+        // Vérifier l'authentification
+        supabase.auth.getSession()
+      ]);
+
+      // Compter les vérifications réussies
+      const successfulChecks = checks.filter((check:any) => !check.error).length;
+      const healthPercentage = (successfulChecks / checks.length) * 100;
+
+      return Math.round(healthPercentage);
+
+    } catch (error) {
+      console.error('Erreur calcul santé système:', error);
+      return 0;
+    }
+  };
+
+  const formatTimeAgo = (timestamp: string): string => {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffInMinutes = Math.floor((now.getTime() - time.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'À l\'instant';
+    if (diffInMinutes < 60) return `Il y a ${diffInMinutes} min`;
+    if (diffInMinutes < 1440) return `Il y a ${Math.floor(diffInMinutes / 60)} h`;
+    return `Il y a ${Math.floor(diffInMinutes / 1440)} j`;
+  };
+
+  // Fonction pour les données par défaut en cas d'erreur
+  const setDefaultData = () => {
+    setStats({
+      totalUsers: 1247,
+      totalDoctors: 18,
+      totalSecretaries: 12,
+      totalPatients: 1217,
+      todayAppointments: 45,
+      pendingAppointments: 12,
+      completedAppointments: 33,
+      activeSessions: 23,
+      systemHealth: 98.5
+    });
+
+    setRecentActivity([
+      {
+        id: '1',
+        type: 'login',
+        user: 'Dr. Martin Dubois',
+        action: 'Connexion au système',
+        timestamp: 'Il y a 5 min',
+        status: 'success'
+      }
+    ]);
+
+    setSystemMetrics([
+      { label: 'CPU', value: 45, status: 'good' },
+      { label: 'Mémoire', value: 62, status: 'warning' },
+      { label: 'Stockage', value: 78, status: 'warning' },
+      { label: 'Réseau', value: 23, status: 'good' }
+    ]);
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -111,6 +359,20 @@ export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-gray-50">
+        <AdminSidebar onNavigate={onNavigate} onLogout={onLogout} activePage="admin-dashboard" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />
+            <p className="text-gray-600">Chargement du dashboard...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-gray-50">
       <AdminSidebar onNavigate={onNavigate} onLogout={onLogout} activePage="admin-dashboard" />
@@ -118,9 +380,19 @@ export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
       <div className="flex-1 overflow-auto">
         <div className="p-8">
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard Administrateur</h1>
-            <p className="text-gray-600 mt-2">Vue d'ensemble de la plateforme médicale</p>
+          <div className="mb-8 flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Dashboard Administrateur</h1>
+              <p className="text-gray-600 mt-2">Vue d'ensemble de la plateforme médicale</p>
+            </div>
+            <Button 
+              variant="outline" 
+              onClick={refreshData}
+              disabled={refreshing}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              Actualiser
+            </Button>
           </div>
 
           {/* Period Selector */}
@@ -191,9 +463,13 @@ export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stats.systemHealth}%</div>
-                <div className="flex items-center text-xs text-green-600 mt-1">
+                <div className={`flex items-center text-xs ${
+                  stats.systemHealth >= 90 ? 'text-green-600' :
+                  stats.systemHealth >= 70 ? 'text-yellow-600' : 'text-red-600'
+                } mt-1`}>
                   <CheckCircle className="w-3 h-3 mr-1" />
-                  Excellent
+                  {stats.systemHealth >= 90 ? 'Excellent' :
+                   stats.systemHealth >= 70 ? 'Bon' : 'Critique'}
                 </div>
               </CardContent>
             </Card>
@@ -214,7 +490,9 @@ export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="font-semibold">{stats.totalDoctors}</span>
-                    <Badge variant="secondary">1.4%</Badge>
+                    <Badge variant="secondary">
+                      {stats.totalUsers > 0 ? ((stats.totalDoctors / stats.totalUsers) * 100).toFixed(1) : 0}%
+                    </Badge>
                   </div>
                 </div>
                 
@@ -225,7 +503,9 @@ export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="font-semibold">{stats.totalSecretaries}</span>
-                    <Badge variant="secondary">1.0%</Badge>
+                    <Badge variant="secondary">
+                      {stats.totalUsers > 0 ? ((stats.totalSecretaries / stats.totalUsers) * 100).toFixed(1) : 0}%
+                    </Badge>
                   </div>
                 </div>
 
@@ -236,7 +516,9 @@ export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="font-semibold">{stats.totalPatients}</span>
-                    <Badge variant="secondary">97.6%</Badge>
+                    <Badge variant="secondary">
+                      {stats.totalUsers > 0 ? ((stats.totalPatients / stats.totalUsers) * 100).toFixed(1) : 0}%
+                    </Badge>
                   </div>
                 </div>
               </CardContent>
@@ -253,11 +535,19 @@ export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
                   <div key={metric.label} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">{metric.label}</span>
-                      <span className="text-sm text-gray-500">{metric.value}%</span>
+                      <span className={`text-sm ${
+                        metric.value < 70 ? 'text-green-600' :
+                        metric.value < 85 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {metric.value}%
+                      </span>
                     </div>
                     <Progress 
                       value={metric.value} 
-                      className="h-2"
+                      className={`h-2 ${
+                        metric.value < 70 ? 'bg-green-100' :
+                        metric.value < 85 ? 'bg-yellow-100' : 'bg-red-100'
+                      }`}
                     />
                   </div>
                 ))}
@@ -271,26 +561,33 @@ export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
                 <CardDescription>Dernières actions sur la plateforme</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {recentActivity.map((activity) => (
-                    <div key={activity.id} className="flex items-start space-x-3">
-                      <div className={`p-1 rounded-full ${getStatusColor(activity.status)}`}>
-                        {getStatusIcon(activity.type)}
+                {recentActivity.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Activity className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">Aucune activité récente</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentActivity.map((activity) => (
+                      <div key={activity.id} className="flex items-start space-x-3">
+                        <div className={`p-1 rounded-full ${getStatusColor(activity.status)}`}>
+                          {getStatusIcon(activity.type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {activity.user}
+                          </p>
+                          <p className="text-sm text-gray-500 truncate">
+                            {activity.action}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {activity.timestamp}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {activity.user}
-                        </p>
-                        <p className="text-sm text-gray-500 truncate">
-                          {activity.action}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {activity.timestamp}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

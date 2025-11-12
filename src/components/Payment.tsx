@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './Header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -21,16 +21,30 @@ import {
   AlertCircle,
   Clock,
   FileText,
-  CheckCircle2
+  CheckCircle2,
+  Loader
 } from 'lucide-react';
 import { toast } from 'sonner';
+//@ts-ignore
+import { supabase } from '../supabaseClient';
 import type { UserType } from '../types/UserType';
+
 interface PaymentProps {
   onNavigate: (page: string) => void;
   isAuthenticated: boolean;
-  userType:UserType ;
+  userType: UserType;
   onLogout: () => void;
   selectedPlan?: any;
+}
+
+interface SubscriptionPlan {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  billing_cycle: 'monthly' | 'yearly';
+  savings: number;
+  features: string[];
 }
 
 export function Payment({ onNavigate, isAuthenticated, userType, onLogout, selectedPlan }: PaymentProps) {
@@ -55,6 +69,42 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout, selec
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [transferSubmitted, setTransferSubmitted] = useState(false);
+  const [currentPlan, setCurrentPlan] = useState<SubscriptionPlan | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (selectedPlan) {
+      setCurrentPlan(selectedPlan);
+      setLoading(false);
+    } else {
+      fetchPlanDetails();
+    }
+  }, [selectedPlan]);
+
+  const fetchPlanDetails = async () => {
+    try {
+      // Récupérer le plan depuis l'URL ou les paramètres de navigation
+      const urlParams = new URLSearchParams(window.location.search);
+      const planId = urlParams.get('planId');
+      
+      if (planId) {
+        const { data: planData, error } = await supabase
+          .from('subscription_plans')
+          .select('*')
+          .eq('id', planId)
+          .eq('is_active', true)
+          .single();
+
+        if (error) throw error;
+        setCurrentPlan(planData);
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement du plan:', error);
+      toast.error('Erreur lors du chargement du plan sélectionné');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({
@@ -68,7 +118,7 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout, selec
     receiverName: 'MEDICONNECT SARL',
     receiverCountry: 'France',
     receiverCity: 'Paris',
-    amount: selectedPlan ? Math.round(selectedPlan.price * 1.2) : 0
+    amount: currentPlan ? Math.round(currentPlan.price * 1.2) : 0
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -96,26 +146,100 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout, selec
 
     setIsProcessing(true);
     
-    // Simulation de l'envoi des informations de transfert
-    setTimeout(() => {
+    try {
+      // Récupérer l'utilisateur connecté
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Vous devez être connecté pour effectuer un paiement');
+        setIsProcessing(false);
+        return;
+      }
+
+      // Créer l'enregistrement de paiement
+      const { data: paymentData, error: paymentError } = await supabase
+        .from('payments')
+        .insert({
+          user_id: user.id,
+          subscription_plan_id: currentPlan?.id,
+          amount: westernUnionDetails.amount,
+          payment_method: 'western_union',
+          payment_status: 'pending',
+          western_union_code: formData.transferCode,
+          sender_name: formData.senderName,
+          sender_country: formData.senderCountry,
+          transfer_amount: parseFloat(formData.transferAmount),
+          transfer_date: formData.transferDate,
+          contact_first_name: formData.firstName,
+          contact_last_name: formData.lastName,
+          contact_email: formData.email,
+          contact_phone: formData.phone
+        })
+        .select()
+        .single();
+
+      if (paymentError) throw paymentError;
+
+      // Créer l'abonnement utilisateur
+      const { error: subscriptionError } = await supabase
+        .from('user_subscriptions')
+        .insert({
+          user_id: user.id,
+          subscription_plan_id: currentPlan?.id,
+          payment_id: paymentData.id,
+          status: 'pending',
+          start_date: null, // Sera défini après vérification
+          end_date: null // Sera défini après vérification
+        });
+
+      if (subscriptionError) throw subscriptionError;
+
+      // Envoyer un email de confirmation (simulation)
+      await sendConfirmationEmail(formData.email, paymentData.id);
+
       setTransferSubmitted(true);
       toast.success('Informations de paiement enregistrées avec succès !');
+
+    } catch (error) {
+      console.error('Erreur lors de l\'enregistrement du paiement:', error);
+      toast.error('Erreur lors de l\'enregistrement du paiement');
+    } finally {
       setIsProcessing(false);
-    }, 2000);
+    }
   };
 
-  const getPlanIcon = (planId: string) => {
-    if (planId?.includes('basic') || planId?.includes('solo')) return <Users className="w-5 h-5" />;
-    if (planId?.includes('professional') || planId?.includes('cabinet')) return <Star className="w-5 h-5" />;
-    if (planId?.includes('premium') || planId?.includes('multi')) return <Crown className="w-5 h-5" />;
+  const sendConfirmationEmail = async (email: string, paymentId: string) => {
+    // Simulation d'envoi d'email
+    console.log(`Email de confirmation envoyé à ${email} pour le paiement ${paymentId}`);
+    // En production, vous utiliseriez un service d'email comme Resend, SendGrid, etc.
+  };
+
+  const getPlanIcon = (planName: string) => {
+    if (planName?.includes('Basic') || planName?.includes('Solo')) return <Users className="w-5 h-5" />;
+    if (planName?.includes('Professional') || planName?.includes('Cabinet')) return <Star className="w-5 h-5" />;
+    if (planName?.includes('Premium') || planName?.includes('Multi')) return <Crown className="w-5 h-5" />;
     return <Users className="w-5 h-5" />;
   };
 
-  if (!selectedPlan) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Card className="max-w-md">
           <CardContent className="p-8 text-center">
+            <Loader className="h-8 w-8 animate-spin mx-auto text-blue-600 mb-4" />
+            <h2 className="text-xl font-semibold mb-4">Chargement du plan...</h2>
+            <p className="text-gray-600">Préparation de votre paiement</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!currentPlan) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card className="max-w-md">
+          <CardContent className="p-8 text-center">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-semibold mb-4">Aucun plan sélectionné</h2>
             <p className="text-gray-600 mb-6">Veuillez d'abord choisir un plan d'abonnement.</p>
             <Button onClick={() => onNavigate('subscription-plans')}>
@@ -517,7 +641,7 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout, selec
                     >
                       {isProcessing ? (
                         <>
-                          <Clock className="w-4 h-4 mr-2 animate-spin" />
+                          <Loader className="w-4 h-4 mr-2 animate-spin" />
                           Traitement en cours...
                         </>
                       ) : (
@@ -547,13 +671,13 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout, selec
                   {/* Plan sélectionné */}
                   <div className="flex items-start space-x-3">
                     <div className="p-2 bg-blue-100 rounded-lg">
-                      {getPlanIcon(selectedPlan.id)}
+                      {getPlanIcon(currentPlan.name)}
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold">{selectedPlan.name}</h3>
-                      <p className="text-sm text-gray-600">{selectedPlan.description}</p>
+                      <h3 className="font-semibold">{currentPlan.name}</h3>
+                      <p className="text-sm text-gray-600">{currentPlan.description}</p>
                       <p className="text-sm text-gray-600 mt-1">
-                        Facturation {selectedPlan.billingCycle === 'monthly' ? 'mensuelle' : 'annuelle'}
+                        Facturation {currentPlan.billing_cycle === 'monthly' ? 'mensuelle' : 'annuelle'}
                       </p>
                     </div>
                   </div>
@@ -563,20 +687,20 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout, selec
                   {/* Détails de facturation */}
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span>Plan {selectedPlan.name}</span>
-                      <span>{selectedPlan.price}€</span>
+                      <span>Plan {currentPlan.name}</span>
+                      <span>{currentPlan.price}€</span>
                     </div>
                     
-                    {selectedPlan.billingCycle === 'yearly' && selectedPlan.savings > 0 && (
+                    {currentPlan.billing_cycle === 'yearly' && currentPlan.savings > 0 && (
                       <div className="flex justify-between text-green-600">
                         <span>Économies annuelles</span>
-                        <span>-{selectedPlan.savings}€</span>
+                        <span>-{currentPlan.savings}€</span>
                       </div>
                     )}
 
                     <div className="flex justify-between">
                       <span>TVA (20%)</span>
-                      <span>{Math.round(selectedPlan.price * 0.2)}€</span>
+                      <span>{Math.round(currentPlan.price * 0.2)}€</span>
                     </div>
                   </div>
 
@@ -584,16 +708,16 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout, selec
 
                   <div className="flex justify-between font-semibold text-lg">
                     <span>Total à payer</span>
-                    <span>{Math.round(selectedPlan.price * 1.2)}€</span>
+                    <span>{Math.round(currentPlan.price * 1.2)}€</span>
                   </div>
 
-                  {selectedPlan.billingCycle === 'yearly' && (
+                  {currentPlan.billing_cycle === 'yearly' && (
                     <div className="text-center p-3 bg-green-50 rounded-lg">
                       <Badge className="bg-green-100 text-green-800 mb-2">
-                        Économisez {selectedPlan.savings}€ par an
+                        Économisez {currentPlan.savings}€ par an
                       </Badge>
                       <p className="text-sm text-green-700">
-                        Soit {Math.round(selectedPlan.price / 12)}€/mois
+                        Soit {Math.round(currentPlan.price / 12)}€/mois
                       </p>
                     </div>
                   )}

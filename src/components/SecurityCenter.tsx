@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AdminSidebar } from './AdminSidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -22,10 +22,43 @@ import {
   Lock
 } from 'lucide-react';
 import { toast } from 'sonner';
+//@ts-ignore
+import { supabase } from '../supabaseClient';
 
 interface SecurityCenterProps {
   onNavigate: (page: string) => void;
   onLogout: () => void;
+}
+
+interface SecurityThreat {
+  id: number;
+  type: string;
+  severity: 'high' | 'medium' | 'low';
+  timestamp: string;
+  details: string;
+  status: 'blocked' | 'investigating' | 'monitored' | 'resolved';
+  country: string;
+  ip_address?: string;
+}
+
+interface Vulnerability {
+  id: number;
+  title: string;
+  severity: 'high' | 'medium' | 'low';
+  description: string;
+  recommendation: string;
+  status: 'open' | 'resolved';
+}
+
+interface ActiveSession {
+  id: number;
+  user: string;
+  role: string;
+  ip_address: string;
+  location: string;
+  device: string;
+  last_activity: string;
+  status: 'active' | 'inactive';
 }
 
 export function SecurityCenter({ onNavigate, onLogout }: SecurityCenterProps) {
@@ -40,98 +73,233 @@ export function SecurityCenter({ onNavigate, onLogout }: SecurityCenterProps) {
     vulnerabilityScanning: false
   });
 
-  // Données simulées pour la sécurité
-  const securityScore = 87;
-  
-  const threats = [
-    {
-      id: 1,
-      type: 'Tentative de connexion suspecte',
-      severity: 'high',
-      timestamp: '2024-01-15T14:15:33Z',
-      details: 'Multiple failed login attempts from IP 89.45.123.67',
-      status: 'blocked',
-      country: 'Russie'
-    },
-    {
-      id: 2,
-      type: 'Accès non autorisé',
-      severity: 'medium',
-      timestamp: '2024-01-15T13:22:18Z',
-      details: 'Access attempt to admin panel from unknown device',
-      status: 'investigating',
-      country: 'Chine'
-    },
-    {
-      id: 3,
-      type: 'Scan de vulnérabilités',
-      severity: 'low',
-      timestamp: '2024-01-15T12:45:07Z',
-      details: 'Port scanning detected from IP 156.78.90.123',
-      status: 'monitored',
-      country: 'États-Unis'
-    }
-  ];
+  const [threats, setThreats] = useState<SecurityThreat[]>([]);
+  const [vulnerabilities, setVulnerabilities] = useState<Vulnerability[]>([]);
+  const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
+  const [securityScore, setSecurityScore] = useState(87);
+  const [loading, setLoading] = useState(true);
 
-  const vulnerabilities = [
-    {
-      id: 1,
-      title: 'Certificat SSL expirant',
-      severity: 'medium',
-      description: 'Le certificat SSL expire dans 15 jours',
-      recommendation: 'Renouveler le certificat SSL',
-      status: 'open'
-    },
-    {
-      id: 2,
-      title: 'Mots de passe faibles',
-      severity: 'high',
-      description: '12 utilisateurs ont des mots de passe faibles',
-      recommendation: 'Forcer le changement de mot de passe',
-      status: 'open'
-    },
-    {
-      id: 3,
-      title: 'Version PHP obsolète',
-      severity: 'low',
-      description: 'PHP 8.1 est disponible (version actuelle: 8.0)',
-      recommendation: 'Mettre à jour vers PHP 8.1',
-      status: 'resolved'
-    }
-  ];
+  // Charger les données de sécurité
+  useEffect(() => {
+    fetchSecurityData();
+  }, []);
 
-  const activeSessions = [
-    {
-      id: 1,
-      user: 'Dr. Martin Dubois',
-      role: 'doctor',
-      ipAddress: '192.168.1.100',
-      location: 'Paris, France',
-      device: 'Chrome on Windows',
-      lastActivity: '2024-01-15T14:30:00Z',
-      status: 'active'
-    },
-    {
-      id: 2,
-      user: 'Marie Secrétaire',
-      role: 'secretary',
-      ipAddress: '192.168.1.101',
-      location: 'Lyon, France',
-      device: 'Firefox on macOS',
-      lastActivity: '2024-01-15T14:25:00Z',
-      status: 'active'
-    },
-    {
-      id: 3,
-      user: 'Admin Système',
-      role: 'admin',
-      ipAddress: '192.168.1.102',
-      location: 'Marseille, France',
-      device: 'Chrome on Linux',
-      lastActivity: '2024-01-15T14:32:00Z',
-      status: 'active'
+  const fetchSecurityData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        fetchSecurityThreats(),
+        fetchVulnerabilities(),
+        fetchActiveSessions(),
+        calculateSecurityScore()
+      ]);
+    } catch (error) {
+      console.error('Erreur lors du chargement des données de sécurité:', error);
+      toast.error('Erreur lors du chargement des données');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  const fetchSecurityThreats = async () => {
+    // Récupérer les menaces depuis Supabase
+    const { data, error } = await supabase
+      .from('security_threats')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (error) {
+      console.error('Erreur lors du chargement des menaces:', error);
+      // Données simulées en cas d'erreur
+      setThreats([
+        {
+          id: 1,
+          type: 'Tentative de connexion suspecte',
+          severity: 'high',
+          timestamp: '2024-01-15T14:15:33Z',
+          details: 'Multiple failed login attempts from IP 89.45.123.67',
+          status: 'blocked',
+          country: 'Russie',
+          ip_address: '89.45.123.67'
+        },
+        {
+          id: 2,
+          type: 'Accès non autorisé',
+          severity: 'medium',
+          timestamp: '2024-01-15T13:22:18Z',
+          details: 'Access attempt to admin panel from unknown device',
+          status: 'investigating',
+          country: 'Chine',
+          ip_address: '156.78.90.123'
+        }
+      ]);
+    } else if (data && data.length > 0) {
+      setThreats(data);
+    }
+  };
+
+  const fetchVulnerabilities = async () => {
+    // Récupérer les vulnérabilités depuis Supabase
+    const { data, error } = await supabase
+      .from('security_vulnerabilities')
+      .select('*')
+      .order('severity', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Erreur lors du chargement des vulnérabilités:', error);
+      // Données simulées en cas d'erreur
+      setVulnerabilities([
+        {
+          id: 1,
+          title: 'Certificat SSL expirant',
+          severity: 'medium',
+          description: 'Le certificat SSL expire dans 15 jours',
+          recommendation: 'Renouveler le certificat SSL',
+          status: 'open'
+        },
+        {
+          id: 2,
+          title: 'Mots de passe faibles',
+          severity: 'high',
+          description: '12 utilisateurs ont des mots de passe faibles',
+          recommendation: 'Forcer le changement de mot de passe',
+          status: 'open'
+        }
+      ]);
+    } else if (data && data.length > 0) {
+      setVulnerabilities(data);
+    }
+  };
+
+  const fetchActiveSessions = async () => {
+    // Récupérer les sessions actives depuis Supabase
+    const { data, error } = await supabase
+      .from('user_sessions')
+      .select('*')
+      .eq('status', 'active')
+      .order('last_activity', { ascending: false });
+
+    if (error) {
+      console.error('Erreur lors du chargement des sessions:', error);
+      // Données simulées en cas d'erreur
+      setActiveSessions([
+        {
+          id: 1,
+          user: 'Dr. Martin Dubois',
+          role: 'doctor',
+          ip_address: '192.168.1.100',
+          location: 'Paris, France',
+          device: 'Chrome on Windows',
+          last_activity: '2024-01-15T14:30:00Z',
+          status: 'active'
+        },
+        {
+          id: 2,
+          user: 'Marie Secrétaire',
+          role: 'secretary',
+          ip_address: '192.168.1.101',
+          location: 'Lyon, France',
+          device: 'Firefox on macOS',
+          last_activity: '2024-01-15T14:25:00Z',
+          status: 'active'
+        }
+      ]);
+    } else if (data && data.length > 0) {
+      setActiveSessions(data);
+    }
+  };
+
+  const calculateSecurityScore = async () => {
+    // Calculer le score de sécurité basé sur les paramètres et les menaces
+    let score = 100;
+    
+    // Pénalités pour les paramètres désactivés
+    if (!securitySettings.twoFactorAuth) score -= 10;
+    if (!securitySettings.vulnerabilityScanning) score -= 5;
+    
+    // Pénalités pour les menaces actives
+    const highThreats = threats.filter(t => t.severity === 'high' && t.status !== 'resolved');
+    const mediumThreats = threats.filter(t => t.severity === 'medium' && t.status !== 'resolved');
+    
+    score -= highThreats.length * 5;
+    score -= mediumThreats.length * 2;
+    
+    setSecurityScore(Math.max(0, Math.min(100, score)));
+  };
+
+  const handleSettingChange = async (setting: string, value: boolean) => {
+    setSecuritySettings(prev => ({
+      ...prev,
+      [setting]: value
+    }));
+
+    // Sauvegarder le paramètre dans Supabase
+    const { error } = await supabase
+      .from('security_settings')
+      .upsert({
+        setting_name: setting,
+        setting_value: value,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) {
+      console.error('Erreur lors de la sauvegarde du paramètre:', error);
+      toast.error('Erreur lors de la mise à jour du paramètre');
+    } else {
+      toast.success(`Paramètre ${setting} ${value ? 'activé' : 'désactivé'}`);
+      calculateSecurityScore();
+    }
+  };
+
+  const handleTerminateSession = async (sessionId: number) => {
+    const { error } = await supabase
+      .from('user_sessions')
+      .update({ status: 'terminated' })
+      .eq('id', sessionId);
+
+    if (error) {
+      console.error('Erreur lors de la terminaison de session:', error);
+      toast.error('Erreur lors de la terminaison de la session');
+    } else {
+      setActiveSessions(prev => prev.filter(session => session.id !== sessionId));
+      toast.success('Session terminée avec succès');
+    }
+  };
+
+  const handleBlockIP = async (ip: string) => {
+    const { error } = await supabase
+      .from('blocked_ips')
+      .insert({ ip_address: ip, reason: 'Manual block', created_at: new Date().toISOString() });
+
+    if (error) {
+      console.error('Erreur lors du blocage IP:', error);
+      toast.error('Erreur lors du blocage de l\'adresse IP');
+    } else {
+      toast.success(`Adresse IP ${ip} bloquée`);
+    }
+  };
+
+  const handleResolveVulnerability = async (vulnId: number) => {
+    const { error } = await supabase
+      .from('security_vulnerabilities')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .eq('id', vulnId);
+
+    if (error) {
+      console.error('Erreur lors de la résolution de vulnérabilité:', error);
+      toast.error('Erreur lors de la résolution');
+    } else {
+      setVulnerabilities(prev => 
+        prev.map(vuln => 
+          vuln.id === vulnId ? { ...vuln, status: 'resolved' } : vuln
+        )
+      );
+      toast.success('Vulnérabilité résolue');
+      calculateSecurityScore();
+    }
+  };
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -165,22 +333,6 @@ export function SecurityCenter({ onNavigate, onLogout }: SecurityCenterProps) {
     }
   };
 
-  const handleSettingChange = (setting: string, value: boolean) => {
-    setSecuritySettings(prev => ({
-      ...prev,
-      [setting]: value
-    }));
-    toast.success(`Paramètre ${setting} ${value ? 'activé' : 'désactivé'}`);
-  };
-
-  const handleTerminateSession = (sessionId: number) => {
-    toast.success('Session terminée avec succès');
-  };
-
-  const handleBlockIP = (ip: string) => {
-    toast.success(`Adresse IP ${ip} bloquée`);
-  };
-
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleString('fr-FR', {
@@ -191,6 +343,20 @@ export function SecurityCenter({ onNavigate, onLogout }: SecurityCenterProps) {
       minute: '2-digit'
     });
   };
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-gray-50">
+        <AdminSidebar onNavigate={onNavigate} onLogout={onLogout} activePage="security-center" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />
+            <p className="text-gray-600">Chargement des données de sécurité...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -205,7 +371,7 @@ export function SecurityCenter({ onNavigate, onLogout }: SecurityCenterProps) {
               <p className="text-gray-600 mt-2">Surveillance et gestion de la sécurité système</p>
             </div>
             <div className="flex items-center space-x-4">
-              <Button variant="outline">
+              <Button variant="outline" onClick={fetchSecurityData}>
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Actualiser
               </Button>
@@ -241,11 +407,15 @@ export function SecurityCenter({ onNavigate, onLogout }: SecurityCenterProps) {
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-center">
                   <div>
-                    <div className="text-2xl font-bold text-green-600">7</div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {Object.values(securitySettings).filter(v => v).length}
+                    </div>
                     <div className="text-sm text-gray-600">Protections actives</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-red-600">2</div>
+                    <div className="text-2xl font-bold text-red-600">
+                      {vulnerabilities.filter(v => v.status === 'open').length}
+                    </div>
                     <div className="text-sm text-gray-600">Vulnérabilités</div>
                   </div>
                 </div>
@@ -289,6 +459,9 @@ export function SecurityCenter({ onNavigate, onLogout }: SecurityCenterProps) {
                                 <Globe className="w-3 h-3" />
                                 <span>{threat.country}</span>
                               </span>
+                              {threat.ip_address && (
+                                <span>IP: {threat.ip_address}</span>
+                              )}
                             </div>
                           </div>
                           <div className="flex space-x-2">
@@ -296,7 +469,11 @@ export function SecurityCenter({ onNavigate, onLogout }: SecurityCenterProps) {
                               <Eye className="w-4 h-4 mr-1" />
                               Détails
                             </Button>
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => threat.ip_address && handleBlockIP(threat.ip_address)}
+                            >
                               <Lock className="w-4 h-4 mr-1" />
                               Bloquer
                             </Button>
@@ -340,7 +517,11 @@ export function SecurityCenter({ onNavigate, onLogout }: SecurityCenterProps) {
                           </div>
                           <div className="flex space-x-2">
                             {vuln.status === 'open' && (
-                              <Button variant="outline" size="sm">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleResolveVulnerability(vuln.id)}
+                              >
                                 <CheckCircle className="w-4 h-4 mr-1" />
                                 Résoudre
                               </Button>
@@ -381,10 +562,10 @@ export function SecurityCenter({ onNavigate, onLogout }: SecurityCenterProps) {
                                   <span>{session.location}</span>
                                 </span>
                                 <span>{session.device}</span>
-                                <span>IP: {session.ipAddress}</span>
+                                <span>IP: {session.ip_address}</span>
                               </div>
                               <p className="text-xs text-gray-500">
-                                Dernière activité: {formatTimestamp(session.lastActivity)}
+                                Dernière activité: {formatTimestamp(session.last_activity)}
                               </p>
                             </div>
                           </div>

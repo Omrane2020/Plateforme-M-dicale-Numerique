@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import  { useState, useEffect } from 'react';
 import { SecretarySidebar } from './SecretarySidebar';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -15,11 +15,9 @@ import {
   ChevronRight,
   User,
   Phone,
-  Mail,
   CheckCircle,
   XCircle,
   Edit,
-  Trash2,
   Filter,
   Download
 } from 'lucide-react';
@@ -38,8 +36,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+//@ts-ignore
+import { supabase } from '../supabaseClient';
+import { toast } from 'sonner';
 
 import type { Page } from '../types/Page';
+
 interface SecretaryAppointmentsProps {
   onNavigate: (page: Page) => void;
   onLogout: () => void;
@@ -47,15 +49,29 @@ interface SecretaryAppointmentsProps {
 
 interface Appointment {
   id: string;
-  date: string;
-  time: string;
-  patient: string;
-  phone: string;
-  email: string;
+  appointment_date: string;
+  appointment_time: string;
+  patient_name: string;
+  patient_phone: string;
+  patient_email: string;
   type: string;
-  status: 'confirmed' | 'pending' | 'cancelled' | 'completed';
+  status: 'confirmed' | 'pending' | 'cancelled' | 'completed' | 'scheduled';
   duration: number;
+  reason?: string;
   notes?: string;
+  doctor_id: string;
+}
+
+interface NewAppointmentForm {
+  patient_name: string;
+  patient_phone: string;
+  patient_email: string;
+  appointment_date: string;
+  appointment_time: string;
+  type: string;
+  duration: number;
+  reason: string;
+  notes: string;
 }
 
 export function SecretaryAppointments({ onNavigate, onLogout }: SecretaryAppointmentsProps) {
@@ -63,76 +79,21 @@ export function SecretaryAppointments({ onNavigate, onLogout }: SecretaryAppoint
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewAppointmentDialog, setShowNewAppointmentDialog] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
 
-  // Mock data - remplacer par Supabase plus tard
-  const appointments: Appointment[] = [
-    {
-      id: '1',
-      date: '2025-10-02',
-      time: '09:00',
-      patient: 'Marie Dubois',
-      phone: '06 12 34 56 78',
-      email: 'marie.dubois@email.com',
-      type: 'Consultation de suivi',
-      status: 'confirmed',
-      duration: 30
-    },
-    {
-      id: '2',
-      date: '2025-10-02',
-      time: '09:30',
-      patient: 'Pierre Martin',
-      phone: '06 23 45 67 89',
-      email: 'pierre.martin@email.com',
-      type: 'Contrôle tension',
-      status: 'confirmed',
-      duration: 20
-    },
-    {
-      id: '3',
-      date: '2025-10-02',
-      time: '10:15',
-      patient: 'Sophie Lambert',
-      phone: '06 34 56 78 90',
-      email: 'sophie.lambert@email.com',
-      type: 'Consultation générale',
-      status: 'pending',
-      duration: 30
-    },
-    {
-      id: '4',
-      date: '2025-10-02',
-      time: '11:00',
-      patient: 'Jean Dupont',
-      phone: '06 45 67 89 01',
-      email: 'jean.dupont@email.com',
-      type: 'Résultats analyses',
-      status: 'confirmed',
-      duration: 25
-    },
-    {
-      id: '5',
-      date: '2025-10-02',
-      time: '14:00',
-      patient: 'Anne Moreau',
-      phone: '06 56 78 90 12',
-      email: 'anne.moreau@email.com',
-      type: 'Première consultation',
-      status: 'confirmed',
-      duration: 45
-    },
-    {
-      id: '6',
-      date: '2025-10-02',
-      time: '15:30',
-      patient: 'Paul Leclerc',
-      phone: '06 67 89 01 23',
-      email: 'paul.leclerc@email.com',
-      type: 'Suivi traitement',
-      status: 'pending',
-      duration: 30
-    }
-  ];
+  const [newAppointment, setNewAppointment] = useState<NewAppointmentForm>({
+    patient_name: '',
+    patient_phone: '',
+    patient_email: '',
+    appointment_date: new Date().toISOString().split('T')[0],
+    appointment_time: '09:00',
+    type: 'consultation',
+    duration: 30,
+    reason: '',
+    notes: ''
+  });
 
   const timeSlots = [
     '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
@@ -140,9 +101,135 @@ export function SecretaryAppointments({ onNavigate, onLogout }: SecretaryAppoint
     '16:00', '16:30', '17:00', '17:30'
   ];
 
+  const appointmentTypes = [
+    { value: 'consultation', label: 'Consultation générale', duration: 30 },
+    { value: 'suivi', label: 'Consultation de suivi', duration: 20 },
+    { value: 'controle', label: 'Contrôle tension', duration: 15 },
+    { value: 'analyse', label: 'Résultats d\'analyses', duration: 20 },
+    { value: 'urgence', label: 'Urgence', duration: 45 },
+    { value: 'prevention', label: 'Médecine préventive', duration: 45 }
+  ];
+
+  useEffect(() => {
+    loadAppointments();
+  }, [selectedDate]);
+
+  const loadAppointments = async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('appointment_date', selectedDate.toISOString().split('T')[0])
+        .order('appointment_time');
+
+      if (error) throw error;
+
+      setAppointments(data || []);
+    } catch (error) {
+      console.error('Erreur lors du chargement des rendez-vous:', error);
+      toast.error('Erreur lors du chargement des rendez-vous');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateAppointment = async () => {
+    try {
+      setIsCreating(true);
+
+      // Récupérer un médecin par défaut
+      const { data: doctor } = await supabase
+        .from('doctors')
+        .select('id')
+        .limit(1)
+        .single();
+
+      if (!doctor) {
+        toast.error('Aucun médecin trouvé');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('appointments')
+        .insert({
+          ...newAppointment,
+          doctor_id: doctor.id,
+          status: 'scheduled',
+          patient_name: newAppointment.patient_name,
+          patient_phone: newAppointment.patient_phone,
+          patient_email: newAppointment.patient_email
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast.success('Rendez-vous créé avec succès');
+      setShowNewAppointmentDialog(false);
+      setNewAppointment({
+        patient_name: '',
+        patient_phone: '',
+        patient_email: '',
+        appointment_date: new Date().toISOString().split('T')[0],
+        appointment_time: '09:00',
+        type: 'consultation',
+        duration: 30,
+        reason: '',
+        notes: ''
+      });
+      
+      loadAppointments();
+    } catch (error) {
+      console.error('Erreur lors de la création du rendez-vous:', error);
+      toast.error('Erreur lors de la création du rendez-vous');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleUpdateStatus = async (appointmentId: string, newStatus: Appointment['status']) => {
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: newStatus })
+        .eq('id', appointmentId);
+
+      if (error) throw error;
+
+      toast.success('Statut mis à jour avec succès');
+      loadAppointments();
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du statut:', error);
+      toast.error('Erreur lors de la mise à jour du statut');
+    }
+  };
+
+  const handleDeleteAppointment = async (appointmentId: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce rendez-vous ?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', appointmentId);
+
+      if (error) throw error;
+
+      toast.success('Rendez-vous supprimé avec succès');
+      loadAppointments();
+    } catch (error) {
+      console.error('Erreur lors de la suppression du rendez-vous:', error);
+      toast.error('Erreur lors de la suppression du rendez-vous');
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'confirmed':
+      case 'scheduled':
         return <Badge className="bg-green-100 text-green-800 border-green-200">Confirmé</Badge>;
       case 'pending':
         return <Badge className="bg-orange-100 text-orange-800 border-orange-200">En attente</Badge>;
@@ -157,24 +244,49 @@ export function SecretaryAppointments({ onNavigate, onLogout }: SecretaryAppoint
 
   const getAppointmentForTimeSlot = (time: string) => {
     return appointments.find(apt => 
-      apt.time === time && 
-      apt.date === selectedDate.toISOString().split('T')[0]
+      apt.appointment_time === time
     );
   };
 
   const todayAppointments = appointments.filter(apt => 
-    apt.date === new Date().toISOString().split('T')[0]
+    apt.appointment_date === new Date().toISOString().split('T')[0]
   );
 
   const pendingAppointments = appointments.filter(apt => apt.status === 'pending').length;
-  const confirmedAppointments = appointments.filter(apt => apt.status === 'confirmed').length;
+  const confirmedAppointments = appointments.filter(apt => 
+    apt.status === 'confirmed' || apt.status === 'scheduled'
+  ).length;
 
   const filteredAppointments = appointments.filter(apt => {
-    const matchesSearch = apt.patient.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         apt.phone.includes(searchTerm);
+    const matchesSearch = apt.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         apt.patient_phone.includes(searchTerm);
     const matchesStatus = filterStatus === 'all' || apt.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
+
+  const exportSchedule = () => {
+    const csvContent = [
+      ['Date', 'Heure', 'Patient', 'Téléphone', 'Email', 'Type', 'Statut', 'Durée'],
+      ...appointments.map(apt => [
+        apt.appointment_date,
+        apt.appointment_time,
+        apt.patient_name,
+        apt.patient_phone,
+        apt.patient_email,
+        apt.type,
+        apt.status,
+        `${apt.duration} min`
+      ])
+    ].map(row => row.join(',')).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `planning-${selectedDate.toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -209,40 +321,109 @@ export function SecretaryAppointments({ onNavigate, onLogout }: SecretaryAppoint
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="patient-name">Patient</Label>
-                  <Input id="patient-name" placeholder="Nom du patient" />
+                  <Label htmlFor="patient-name">Patient *</Label>
+                  <Input 
+                    id="patient-name" 
+                    placeholder="Nom du patient"
+                    value={newAppointment.patient_name}
+                    onChange={(e) => setNewAppointment(prev => ({
+                      ...prev,
+                      patient_name: e.target.value
+                    }))}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="patient-phone">Téléphone</Label>
-                  <Input id="patient-phone" placeholder="06 12 34 56 78" />
+                  <Label htmlFor="patient-phone">Téléphone *</Label>
+                  <Input 
+                    id="patient-phone" 
+                    placeholder="06 12 34 56 78"
+                    value={newAppointment.patient_phone}
+                    onChange={(e) => setNewAppointment(prev => ({
+                      ...prev,
+                      patient_phone: e.target.value
+                    }))}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="appointment-date">Date</Label>
-                  <Input id="appointment-date" type="date" />
+                  <Label htmlFor="patient-email">Email *</Label>
+                  <Input 
+                    id="patient-email" 
+                    type="email"
+                    placeholder="patient@email.com"
+                    value={newAppointment.patient_email}
+                    onChange={(e) => setNewAppointment(prev => ({
+                      ...prev,
+                      patient_email: e.target.value
+                    }))}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="appointment-time">Heure</Label>
-                  <Input id="appointment-time" type="time" />
+                  <Label htmlFor="appointment-date">Date *</Label>
+                  <Input 
+                    id="appointment-date" 
+                    type="date"
+                    value={newAppointment.appointment_date}
+                    onChange={(e) => setNewAppointment(prev => ({
+                      ...prev,
+                      appointment_date: e.target.value
+                    }))}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="appointment-type">Type de consultation</Label>
-                  <Select>
+                  <Label htmlFor="appointment-time">Heure *</Label>
+                  <Select 
+                    value={newAppointment.appointment_time}
+                    onValueChange={(value) => setNewAppointment(prev => ({
+                      ...prev,
+                      appointment_time: value
+                    }))}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner le type" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="consultation">Consultation générale</SelectItem>
-                      <SelectItem value="suivi">Consultation de suivi</SelectItem>
-                      <SelectItem value="controle">Contrôle</SelectItem>
-                      <SelectItem value="urgence">Urgence</SelectItem>
+                      {timeSlots.map(time => (
+                        <SelectItem key={time} value={time}>{time}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="duration">Durée (minutes)</Label>
-                  <Select>
+                  <Label htmlFor="appointment-type">Type de consultation *</Label>
+                  <Select 
+                    value={newAppointment.type}
+                    onValueChange={(value) => {
+                      const type = appointmentTypes.find(t => t.value === value);
+                      setNewAppointment(prev => ({
+                        ...prev,
+                        type: value,
+                        duration: type?.duration || 30
+                      }));
+                    }}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner la durée" />
+                      <SelectValue placeholder="Sélectionner le type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {appointmentTypes.map(type => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="duration">Durée (minutes) *</Label>
+                  <Select 
+                    value={newAppointment.duration.toString()}
+                    onValueChange={(value) => setNewAppointment(prev => ({
+                      ...prev,
+                      duration: parseInt(value)
+                    }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="15">15 minutes</SelectItem>
@@ -253,8 +434,24 @@ export function SecretaryAppointments({ onNavigate, onLogout }: SecretaryAppoint
                     </SelectContent>
                   </Select>
                 </div>
-                <Button className="w-full bg-green-600 hover:bg-green-700">
-                  Créer le rendez-vous
+                <div className="space-y-2">
+                  <Label htmlFor="reason">Motif</Label>
+                  <Input 
+                    id="reason" 
+                    placeholder="Motif de la consultation"
+                    value={newAppointment.reason}
+                    onChange={(e) => setNewAppointment(prev => ({
+                      ...prev,
+                      reason: e.target.value
+                    }))}
+                  />
+                </div>
+                <Button 
+                  className="w-full bg-green-600 hover:bg-green-700"
+                  onClick={handleCreateAppointment}
+                  disabled={isCreating || !newAppointment.patient_name || !newAppointment.patient_phone}
+                >
+                  {isCreating ? 'Création...' : 'Créer le rendez-vous'}
                 </Button>
               </div>
             </DialogContent>
@@ -361,7 +558,7 @@ export function SecretaryAppointments({ onNavigate, onLogout }: SecretaryAppoint
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Tous les statuts</SelectItem>
-                      <SelectItem value="confirmed">Confirmés</SelectItem>
+                      <SelectItem value="scheduled">Confirmés</SelectItem>
                       <SelectItem value="pending">En attente</SelectItem>
                       <SelectItem value="cancelled">Annulés</SelectItem>
                       <SelectItem value="completed">Terminés</SelectItem>
@@ -369,7 +566,7 @@ export function SecretaryAppointments({ onNavigate, onLogout }: SecretaryAppoint
                   </Select>
                 </div>
 
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full" onClick={exportSchedule}>
                   <Download className="h-4 w-4 mr-2" />
                   Exporter le planning
                 </Button>
@@ -390,89 +587,113 @@ export function SecretaryAppointments({ onNavigate, onLogout }: SecretaryAppoint
                   })}
                 </CardTitle>
                 <div className="flex items-center space-x-2">
-                  <Button size="sm" variant="outline">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => {
+                      const prevDay = new Date(selectedDate);
+                      prevDay.setDate(prevDay.getDate() - 1);
+                      setSelectedDate(prevDay);
+                    }}
+                  >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <Button size="sm" variant="outline">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => {
+                      const nextDay = new Date(selectedDate);
+                      nextDay.setDate(nextDay.getDate() + 1);
+                      setSelectedDate(nextDay);
+                    }}
+                  >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                  {timeSlots.map((time) => {
-                    const appointment = getAppointmentForTimeSlot(time);
-                    
-                    return (
-                      <div 
-                        key={time}
-                        className={`flex items-center p-4 border rounded-lg transition-all ${
-                          appointment 
-                            ? 'border-green-200 bg-green-50 hover:bg-green-100' 
-                            : 'border-slate-200 bg-white hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="w-20 flex-shrink-0">
-                          <div className="flex items-center text-slate-700">
-                            <Clock className="h-4 w-4 mr-2 text-slate-500" />
-                            <span>{time}</span>
-                          </div>
-                        </div>
-                        
-                        {appointment ? (
-                          <div className="flex-1 flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-3 mb-2">
-                                <h4 className="text-slate-800">{appointment.patient}</h4>
-                                {getStatusBadge(appointment.status)}
-                              </div>
-                              <p className="text-sm text-slate-600 mb-1">{appointment.type}</p>
-                              <div className="flex items-center space-x-4 text-xs text-slate-500">
-                                <span className="flex items-center">
-                                  <Phone className="h-3 w-3 mr-1" />
-                                  {appointment.phone}
-                                </span>
-                                <span className="flex items-center">
-                                  <Clock className="h-3 w-3 mr-1" />
-                                  {appointment.duration} min
-                                </span>
-                              </div>
+                {isLoading ? (
+                  <div className="flex justify-center items-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                    {timeSlots.map((time) => {
+                      const appointment = getAppointmentForTimeSlot(time);
+                      
+                      return (
+                        <div 
+                          key={time}
+                          className={`flex items-center p-4 border rounded-lg transition-all ${
+                            appointment 
+                              ? 'border-green-200 bg-green-50 hover:bg-green-100' 
+                              : 'border-slate-200 bg-white hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="w-20 flex-shrink-0">
+                            <div className="flex items-center text-slate-700">
+                              <Clock className="h-4 w-4 mr-2 text-slate-500" />
+                              <span>{time}</span>
                             </div>
-                            <div className="flex items-center space-x-2">
-                              {appointment.status === 'pending' && (
+                          </div>
+                          
+                          {appointment ? (
+                            <div className="flex-1 flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-3 mb-2">
+                                  <h4 className="text-slate-800">{appointment.patient_name}</h4>
+                                  {getStatusBadge(appointment.status)}
+                                </div>
+                                <p className="text-sm text-slate-600 mb-1">{appointment.type}</p>
+                                <div className="flex items-center space-x-4 text-xs text-slate-500">
+                                  <span className="flex items-center">
+                                    <Phone className="h-3 w-3 mr-1" />
+                                    {appointment.patient_phone}
+                                  </span>
+                                  <span className="flex items-center">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    {appointment.duration} min
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                {appointment.status === 'pending' && (
+                                  <Button 
+                                    size="sm" 
+                                    className="bg-green-600 hover:bg-green-700"
+                                    onClick={() => handleUpdateStatus(appointment.id, 'scheduled')}
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                    Confirmer
+                                  </Button>
+                                )}
                                 <Button 
                                   size="sm" 
-                                  className="bg-green-600 hover:bg-green-700"
+                                  variant="outline"
+                                  className="border-blue-600 text-blue-600 hover:bg-blue-50"
                                 >
-                                  <CheckCircle className="h-4 w-4 mr-1" />
-                                  Confirmer
+                                  <Edit className="h-4 w-4" />
                                 </Button>
-                              )}
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                className="border-blue-600 text-blue-600 hover:bg-blue-50"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                className="border-red-600 text-red-600 hover:bg-red-50"
-                              >
-                                <XCircle className="h-4 w-4" />
-                              </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="border-red-600 text-red-600 hover:bg-red-50"
+                                  onClick={() => handleDeleteAppointment(appointment.id)}
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          <div className="flex-1 text-center">
-                            <span className="text-slate-400 text-sm">Créneau disponible</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                          ) : (
+                            <div className="flex-1 text-center">
+                              <span className="text-slate-400 text-sm">Créneau disponible</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

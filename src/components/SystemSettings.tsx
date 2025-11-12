@@ -1,4 +1,4 @@
-import  { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AdminSidebar } from './AdminSidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -8,7 +8,6 @@ import { Switch } from './ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-
 import { 
   Settings,
   Database,
@@ -19,77 +18,326 @@ import {
   Save,
   Download,
   Upload,
-
+  Loader2,
+  TestTube
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+//@ts-ignore
+import { supabase } from '../supabaseClient';
 interface SystemSettingsProps {
   onNavigate: (page: string) => void;
   onLogout: () => void;
 }
 
+interface SystemSettings {
+  // Paramètres généraux
+  system_name: string;
+  system_description: string;
+  timezone: string;
+  language: string;
+  date_format: string;
+  
+  // Paramètres d'email
+  smtp_host: string;
+  smtp_port: string;
+  smtp_username: string;
+  smtp_password: string;
+  email_from: string;
+  
+  // Paramètres de sécurité
+  session_timeout: string;
+  password_min_length: string;
+  password_require_special: boolean;
+  two_factor_auth: boolean;
+  login_attempts: string;
+  lockout_duration: string;
+  
+  // Notifications
+  email_notifications: boolean;
+  appointment_reminders: boolean;
+  system_alerts: boolean;
+  maintenance_mode: boolean;
+  
+  // Sauvegarde
+  auto_backup: boolean;
+  backup_frequency: string;
+  backup_retention: string;
+  
+  // API
+  api_rate_limit: string;
+  api_timeout: string;
+  enable_api_logs: boolean;
+}
+
 export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<SystemSettings>({
     // Paramètres généraux
-    systemName: 'MediCare Platform',
-    systemDescription: 'Plateforme médicale numérique',
+    system_name: 'MediCare Platform',
+    system_description: 'Plateforme médicale numérique',
     timezone: 'Europe/Paris',
     language: 'fr',
-    dateFormat: 'dd/mm/yyyy',
+    date_format: 'dd/mm/yyyy',
     
     // Paramètres d'email
-    smtpHost: 'smtp.gmail.com',
-    smtpPort: '587',
-    smtpUsername: 'system@medicare.com',
-    smtpPassword: '',
-    emailFrom: 'MediCare <noreply@medicare.com>',
+    smtp_host: 'smtp.gmail.com',
+    smtp_port: '587',
+    smtp_username: 'system@medicare.com',
+    smtp_password: '',
+    email_from: 'MediCare <noreply@medicare.com>',
     
     // Paramètres de sécurité
-    sessionTimeout: '30',
-    passwordMinLength: '8',
-    passwordRequireSpecial: true,
-    twoFactorAuth: false,
-    loginAttempts: '5',
-    lockoutDuration: '15',
+    session_timeout: '30',
+    password_min_length: '8',
+    password_require_special: true,
+    two_factor_auth: false,
+    login_attempts: '5',
+    lockout_duration: '15',
     
     // Notifications
-    emailNotifications: true,
-    appointmentReminders: true,
-    systemAlerts: true,
-    maintenanceMode: false,
+    email_notifications: true,
+    appointment_reminders: true,
+    system_alerts: true,
+    maintenance_mode: false,
     
     // Sauvegarde
-    autoBackup: true,
-    backupFrequency: 'daily',
-    backupRetention: '30',
+    auto_backup: true,
+    backup_frequency: 'daily',
+    backup_retention: '30',
     
     // API
-    apiRateLimit: '1000',
-    apiTimeout: '30',
-    enableApiLogs: true
+    api_rate_limit: '1000',
+    api_timeout: '30',
+    enable_api_logs: true
   });
 
-  const handleSettingChange = (key: string, value: any) => {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [testingConnection, setTestingConnection] = useState(false);
+
+  // Charger les paramètres depuis Supabase
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('*');
+
+      if (error) throw error;
+
+      // Transformer les données pour les mettre dans le state
+      if (data && data.length > 0) {
+        const settingsMap = data.reduce((acc:any, setting:any) => {
+          acc[setting.setting_key] = setting.setting_value;
+          return acc;
+        }, {} as Record<string, any>);
+
+        setSettings(prev => ({
+          ...prev,
+          ...settingsMap
+        }));
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des paramètres:', error);
+      toast.error('Erreur lors du chargement des paramètres');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSettingChange = (key: keyof SystemSettings, value: any) => {
     setSettings(prev => ({
       ...prev,
       [key]: value
     }));
   };
 
-  const handleSave = (section: string) => {
-    toast.success(`Paramètres ${section} sauvegardés`);
+  const saveSettings = async (section: string, settingsToSave: Partial<SystemSettings>) => {
+    try {
+      setSaving(section);
+
+      // Préparer les données pour l'insertion
+      const settingsData = Object.entries(settingsToSave).map(([key, value]) => ({
+        setting_key: key,
+        setting_value: value,
+        category: section,
+        updated_at: new Date().toISOString()
+      }));
+
+      // Utiliser upsert pour mettre à jour ou créer les paramètres
+      const { error } = await supabase
+        .from('system_settings')
+        .upsert(settingsData, {
+          onConflict: 'setting_key'
+        });
+
+      if (error) throw error;
+
+      toast.success(`Paramètres ${section} sauvegardés`);
+      
+      // Mettre à jour le cache côté client si nécessaire
+      await supabase.auth.refreshSession();
+      
+    } catch (error: any) {
+      console.error(`Erreur sauvegarde paramètres ${section}:`, error);
+      toast.error(`Erreur lors de la sauvegarde: ${error.message}`);
+    } finally {
+      setSaving(null);
+    }
   };
 
-  const handleBackup = () => {
-    toast.loading('Création de la sauvegarde...', { id: 'backup' });
-    setTimeout(() => {
+  const testEmailConnection = async () => {
+    try {
+      setTestingConnection(true);
+      
+      // Appeler une edge function pour tester la connexion SMTP
+      const { data, error } = await supabase.functions.invoke('test-smtp-connection', {
+        body: {
+          smtp_host: settings.smtp_host,
+          smtp_port: settings.smtp_port,
+          smtp_username: settings.smtp_username,
+          smtp_password: settings.smtp_password
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success('Connexion SMTP réussie');
+      } else {
+        toast.error('Échec de la connexion SMTP');
+      }
+    } catch (error: any) {
+      console.error('Erreur test SMTP:', error);
+      toast.error('Erreur lors du test de connexion');
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const handleBackup = async () => {
+    try {
+      toast.loading('Création de la sauvegarde...', { id: 'backup' });
+      
+      // Appeler une edge function pour créer une sauvegarde
+      const { data, error } = await supabase.functions.invoke('create-backup', {
+        body: {
+          backup_type: 'manual',
+          retention_days: parseInt(settings.backup_retention)
+        }
+      });
+
+      if (error) throw error;
+
       toast.success('Sauvegarde créée avec succès', { id: 'backup' });
-    }, 2000);
+      
+      // Enregistrer l'événement de sauvegarde
+      await supabase
+        .from('system_events')
+        .insert({
+          event_type: 'backup_created',
+          description: 'Sauvegarde manuelle créée',
+          metadata: { backup_id: data.backup_id }
+        });
+        
+    } catch (error: any) {
+      console.error('Erreur sauvegarde:', error);
+      toast.error('Erreur lors de la création de la sauvegarde', { id: 'backup' });
+    }
   };
 
-  const handleRestore = () => {
-    toast.warning('Fonctionnalité de restauration en développement');
+  const handleRestore = async () => {
+    try {
+      // Pour la restauration, nous devrions avoir une interface pour sélectionner la sauvegarde
+      // Pour l'instant, montrer un message d'avertissement
+      toast.warning('Veuillez contacter l\'administrateur pour la restauration', {
+        description: 'La restauration nécessite une intervention manuelle'
+      });
+    } catch (error) {
+      console.error('Erreur restauration:', error);
+      toast.error('Erreur lors de la restauration');
+    }
   };
+
+  const handleSaveGeneral = () => {
+    const generalSettings = {
+      system_name: settings.system_name,
+      system_description: settings.system_description,
+      timezone: settings.timezone,
+      language: settings.language,
+      date_format: settings.date_format
+    };
+    saveSettings('general', generalSettings);
+  };
+
+  const handleSaveEmail = () => {
+    const emailSettings = {
+      smtp_host: settings.smtp_host,
+      smtp_port: settings.smtp_port,
+      smtp_username: settings.smtp_username,
+      smtp_password: settings.smtp_password,
+      email_from: settings.email_from
+    };
+    saveSettings('email', emailSettings);
+  };
+
+  const handleSaveSecurity = () => {
+    const securitySettings = {
+      session_timeout: settings.session_timeout,
+      password_min_length: settings.password_min_length,
+      password_require_special: settings.password_require_special,
+      two_factor_auth: settings.two_factor_auth,
+      login_attempts: settings.login_attempts,
+      lockout_duration: settings.lockout_duration
+    };
+    saveSettings('security', securitySettings);
+  };
+
+  const handleSaveNotifications = () => {
+    const notificationSettings = {
+      email_notifications: settings.email_notifications,
+      appointment_reminders: settings.appointment_reminders,
+      system_alerts: settings.system_alerts,
+      maintenance_mode: settings.maintenance_mode
+    };
+    saveSettings('notifications', notificationSettings);
+  };
+
+  const handleSaveBackup = () => {
+    const backupSettings = {
+      auto_backup: settings.auto_backup,
+      backup_frequency: settings.backup_frequency,
+      backup_retention: settings.backup_retention
+    };
+    saveSettings('backup', backupSettings);
+  };
+
+  const handleSaveApi = () => {
+    const apiSettings = {
+      api_rate_limit: settings.api_rate_limit,
+      api_timeout: settings.api_timeout,
+      enable_api_logs: settings.enable_api_logs
+    };
+    saveSettings('api', apiSettings);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-gray-50">
+        <AdminSidebar onNavigate={onNavigate} onLogout={onLogout} activePage="system-settings" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />
+            <p className="text-gray-600">Chargement des paramètres...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -129,8 +377,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                       <Label htmlFor="systemName">Nom du système</Label>
                       <Input
                         id="systemName"
-                        value={settings.systemName}
-                        onChange={(e) => handleSettingChange('systemName', e.target.value)}
+                        value={settings.system_name}
+                        onChange={(e) => handleSettingChange('system_name', e.target.value)}
                       />
                     </div>
 
@@ -164,7 +412,7 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
 
                     <div>
                       <Label htmlFor="dateFormat">Format de date</Label>
-                      <Select value={settings.dateFormat} onValueChange={(value) => handleSettingChange('dateFormat', value)}>
+                      <Select value={settings.date_format} onValueChange={(value) => handleSettingChange('date_format', value)}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -181,15 +429,23 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                     <Label htmlFor="systemDescription">Description du système</Label>
                     <Textarea
                       id="systemDescription"
-                      value={settings.systemDescription}
-                      onChange={(e) => handleSettingChange('systemDescription', e.target.value)}
+                      value={settings.system_description}
+                      onChange={(e) => handleSettingChange('system_description', e.target.value)}
                       rows={3}
                     />
                   </div>
 
-                  <Button onClick={() => handleSave('généraux')} className="bg-blue-600 hover:bg-blue-700">
-                    <Save className="w-4 h-4 mr-2" />
-                    Sauvegarder
+                  <Button 
+                    onClick={handleSaveGeneral} 
+                    className="bg-blue-600 hover:bg-blue-700"
+                    disabled={saving === 'general'}
+                  >
+                    {saving === 'general' ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    {saving === 'general' ? 'Sauvegarde...' : 'Sauvegarder'}
                   </Button>
                 </CardContent>
               </Card>
@@ -211,8 +467,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                       <Label htmlFor="smtpHost">Serveur SMTP</Label>
                       <Input
                         id="smtpHost"
-                        value={settings.smtpHost}
-                        onChange={(e) => handleSettingChange('smtpHost', e.target.value)}
+                        value={settings.smtp_host}
+                        onChange={(e) => handleSettingChange('smtp_host', e.target.value)}
                       />
                     </div>
 
@@ -220,8 +476,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                       <Label htmlFor="smtpPort">Port SMTP</Label>
                       <Input
                         id="smtpPort"
-                        value={settings.smtpPort}
-                        onChange={(e) => handleSettingChange('smtpPort', e.target.value)}
+                        value={settings.smtp_port}
+                        onChange={(e) => handleSettingChange('smtp_port', e.target.value)}
                       />
                     </div>
 
@@ -229,8 +485,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                       <Label htmlFor="smtpUsername">Nom d'utilisateur</Label>
                       <Input
                         id="smtpUsername"
-                        value={settings.smtpUsername}
-                        onChange={(e) => handleSettingChange('smtpUsername', e.target.value)}
+                        value={settings.smtp_username}
+                        onChange={(e) => handleSettingChange('smtp_username', e.target.value)}
                       />
                     </div>
 
@@ -239,8 +495,9 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                       <Input
                         id="smtpPassword"
                         type="password"
-                        value={settings.smtpPassword}
-                        onChange={(e) => handleSettingChange('smtpPassword', e.target.value)}
+                        value={settings.smtp_password}
+                        onChange={(e) => handleSettingChange('smtp_password', e.target.value)}
+                        placeholder="Laissez vide pour ne pas modifier"
                       />
                     </div>
                   </div>
@@ -249,19 +506,35 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                     <Label htmlFor="emailFrom">Adresse d'expéditeur</Label>
                     <Input
                       id="emailFrom"
-                      value={settings.emailFrom}
-                      onChange={(e) => handleSettingChange('emailFrom', e.target.value)}
+                      value={settings.email_from}
+                      onChange={(e) => handleSettingChange('email_from', e.target.value)}
                     />
                   </div>
 
                   <div className="flex space-x-4">
-                    <Button onClick={() => handleSave('email')} className="bg-blue-600 hover:bg-blue-700">
-                      <Save className="w-4 h-4 mr-2" />
-                      Sauvegarder
+                    <Button 
+                      onClick={handleSaveEmail} 
+                      className="bg-blue-600 hover:bg-blue-700"
+                      disabled={saving === 'email'}
+                    >
+                      {saving === 'email' ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4 mr-2" />
+                      )}
+                      {saving === 'email' ? 'Sauvegarde...' : 'Sauvegarder'}
                     </Button>
-                    <Button variant="outline">
-                      <Mail className="w-4 h-4 mr-2" />
-                      Tester la connexion
+                    <Button 
+                      variant="outline" 
+                      onClick={testEmailConnection}
+                      disabled={testingConnection}
+                    >
+                      {testingConnection ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <TestTube className="w-4 h-4 mr-2" />
+                      )}
+                      {testingConnection ? 'Test...' : 'Tester la connexion'}
                     </Button>
                   </div>
                 </CardContent>
@@ -285,8 +558,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                       <Input
                         id="sessionTimeout"
                         type="number"
-                        value={settings.sessionTimeout}
-                        onChange={(e) => handleSettingChange('sessionTimeout', e.target.value)}
+                        value={settings.session_timeout}
+                        onChange={(e) => handleSettingChange('session_timeout', e.target.value)}
                       />
                     </div>
 
@@ -295,8 +568,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                       <Input
                         id="passwordMinLength"
                         type="number"
-                        value={settings.passwordMinLength}
-                        onChange={(e) => handleSettingChange('passwordMinLength', e.target.value)}
+                        value={settings.password_min_length}
+                        onChange={(e) => handleSettingChange('password_min_length', e.target.value)}
                       />
                     </div>
 
@@ -305,8 +578,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                       <Input
                         id="loginAttempts"
                         type="number"
-                        value={settings.loginAttempts}
-                        onChange={(e) => handleSettingChange('loginAttempts', e.target.value)}
+                        value={settings.login_attempts}
+                        onChange={(e) => handleSettingChange('login_attempts', e.target.value)}
                       />
                     </div>
 
@@ -315,8 +588,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                       <Input
                         id="lockoutDuration"
                         type="number"
-                        value={settings.lockoutDuration}
-                        onChange={(e) => handleSettingChange('lockoutDuration', e.target.value)}
+                        value={settings.lockout_duration}
+                        onChange={(e) => handleSettingChange('lockout_duration', e.target.value)}
                       />
                     </div>
                   </div>
@@ -328,8 +601,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                         <p className="text-sm text-gray-500">Exiger des caractères spéciaux dans les mots de passe</p>
                       </div>
                       <Switch
-                        checked={settings.passwordRequireSpecial}
-                        onCheckedChange={(checked) => handleSettingChange('passwordRequireSpecial', checked)}
+                        checked={settings.password_require_special}
+                        onCheckedChange={(checked) => handleSettingChange('password_require_special', checked)}
                       />
                     </div>
 
@@ -339,15 +612,23 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                         <p className="text-sm text-gray-500">Activer la 2FA pour tous les utilisateurs</p>
                       </div>
                       <Switch
-                        checked={settings.twoFactorAuth}
-                        onCheckedChange={(checked) => handleSettingChange('twoFactorAuth', checked)}
+                        checked={settings.two_factor_auth}
+                        onCheckedChange={(checked) => handleSettingChange('two_factor_auth', checked)}
                       />
                     </div>
                   </div>
 
-                  <Button onClick={() => handleSave('sécurité')} className="bg-blue-600 hover:bg-blue-700">
-                    <Save className="w-4 h-4 mr-2" />
-                    Sauvegarder
+                  <Button 
+                    onClick={handleSaveSecurity} 
+                    className="bg-blue-600 hover:bg-blue-700"
+                    disabled={saving === 'security'}
+                  >
+                    {saving === 'security' ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    {saving === 'security' ? 'Sauvegarde...' : 'Sauvegarder'}
                   </Button>
                 </CardContent>
               </Card>
@@ -371,8 +652,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                         <p className="text-sm text-gray-500">Envoyer des notifications par email</p>
                       </div>
                       <Switch
-                        checked={settings.emailNotifications}
-                        onCheckedChange={(checked) => handleSettingChange('emailNotifications', checked)}
+                        checked={settings.email_notifications}
+                        onCheckedChange={(checked) => handleSettingChange('email_notifications', checked)}
                       />
                     </div>
 
@@ -382,8 +663,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                         <p className="text-sm text-gray-500">Envoyer des rappels automatiques</p>
                       </div>
                       <Switch
-                        checked={settings.appointmentReminders}
-                        onCheckedChange={(checked) => handleSettingChange('appointmentReminders', checked)}
+                        checked={settings.appointment_reminders}
+                        onCheckedChange={(checked) => handleSettingChange('appointment_reminders', checked)}
                       />
                     </div>
 
@@ -393,8 +674,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                         <p className="text-sm text-gray-500">Notifications des événements système</p>
                       </div>
                       <Switch
-                        checked={settings.systemAlerts}
-                        onCheckedChange={(checked) => handleSettingChange('systemAlerts', checked)}
+                        checked={settings.system_alerts}
+                        onCheckedChange={(checked) => handleSettingChange('system_alerts', checked)}
                       />
                     </div>
 
@@ -404,15 +685,23 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                         <p className="text-sm text-gray-500">Activer le mode maintenance</p>
                       </div>
                       <Switch
-                        checked={settings.maintenanceMode}
-                        onCheckedChange={(checked) => handleSettingChange('maintenanceMode', checked)}
+                        checked={settings.maintenance_mode}
+                        onCheckedChange={(checked) => handleSettingChange('maintenance_mode', checked)}
                       />
                     </div>
                   </div>
 
-                  <Button onClick={() => handleSave('notifications')} className="bg-blue-600 hover:bg-blue-700">
-                    <Save className="w-4 h-4 mr-2" />
-                    Sauvegarder
+                  <Button 
+                    onClick={handleSaveNotifications} 
+                    className="bg-blue-600 hover:bg-blue-700"
+                    disabled={saving === 'notifications'}
+                  >
+                    {saving === 'notifications' ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    {saving === 'notifications' ? 'Sauvegarde...' : 'Sauvegarder'}
                   </Button>
                 </CardContent>
               </Card>
@@ -436,15 +725,15 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                         <p className="text-sm text-gray-500">Activer les sauvegardes automatiques</p>
                       </div>
                       <Switch
-                        checked={settings.autoBackup}
-                        onCheckedChange={(checked) => handleSettingChange('autoBackup', checked)}
+                        checked={settings.auto_backup}
+                        onCheckedChange={(checked) => handleSettingChange('auto_backup', checked)}
                       />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <Label htmlFor="backupFrequency">Fréquence</Label>
-                        <Select value={settings.backupFrequency} onValueChange={(value) => handleSettingChange('backupFrequency', value)}>
+                        <Select value={settings.backup_frequency} onValueChange={(value) => handleSettingChange('backup_frequency', value)}>
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
@@ -461,15 +750,23 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                         <Input
                           id="backupRetention"
                           type="number"
-                          value={settings.backupRetention}
-                          onChange={(e) => handleSettingChange('backupRetention', e.target.value)}
+                          value={settings.backup_retention}
+                          onChange={(e) => handleSettingChange('backup_retention', e.target.value)}
                         />
                       </div>
                     </div>
 
-                    <Button onClick={() => handleSave('sauvegarde')} className="bg-blue-600 hover:bg-blue-700">
-                      <Save className="w-4 h-4 mr-2" />
-                      Sauvegarder
+                    <Button 
+                      onClick={handleSaveBackup} 
+                      className="bg-blue-600 hover:bg-blue-700"
+                      disabled={saving === 'backup'}
+                    >
+                      {saving === 'backup' ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4 mr-2" />
+                      )}
+                      {saving === 'backup' ? 'Sauvegarde...' : 'Sauvegarder'}
                     </Button>
                   </CardContent>
                 </Card>
@@ -512,8 +809,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                       <Input
                         id="apiRateLimit"
                         type="number"
-                        value={settings.apiRateLimit}
-                        onChange={(e) => handleSettingChange('apiRateLimit', e.target.value)}
+                        value={settings.api_rate_limit}
+                        onChange={(e) => handleSettingChange('api_rate_limit', e.target.value)}
                       />
                     </div>
 
@@ -522,8 +819,8 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                       <Input
                         id="apiTimeout"
                         type="number"
-                        value={settings.apiTimeout}
-                        onChange={(e) => handleSettingChange('apiTimeout', e.target.value)}
+                        value={settings.api_timeout}
+                        onChange={(e) => handleSettingChange('api_timeout', e.target.value)}
                       />
                     </div>
                   </div>
@@ -534,14 +831,22 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
                       <p className="text-sm text-gray-500">Enregistrer les appels API</p>
                     </div>
                     <Switch
-                      checked={settings.enableApiLogs}
-                      onCheckedChange={(checked) => handleSettingChange('enableApiLogs', checked)}
+                      checked={settings.enable_api_logs}
+                      onCheckedChange={(checked) => handleSettingChange('enable_api_logs', checked)}
                     />
                   </div>
 
-                  <Button onClick={() => handleSave('API')} className="bg-blue-600 hover:bg-blue-700">
-                    <Save className="w-4 h-4 mr-2" />
-                    Sauvegarder
+                  <Button 
+                    onClick={handleSaveApi} 
+                    className="bg-blue-600 hover:bg-blue-700"
+                    disabled={saving === 'api'}
+                  >
+                    {saving === 'api' ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    {saving === 'api' ? 'Sauvegarde...' : 'Sauvegarder'}
                   </Button>
                 </CardContent>
               </Card>

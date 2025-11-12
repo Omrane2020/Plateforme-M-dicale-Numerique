@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './Header';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -19,8 +19,10 @@ import {
   Phone,
   Mail
 } from 'lucide-react';
-
+//@ts-ignore
+import { supabase } from '../supabaseClient';
 import type { Page } from '../types/Page';
+
 interface RequestAppointmentProps {
   onNavigate: (page: Page) => void;
   onLogout: () => void;
@@ -42,9 +44,9 @@ interface AppointmentRequest {
 
 export function RequestAppointment({ onNavigate, onLogout }: RequestAppointmentProps) {
   const [formData, setFormData] = useState<AppointmentRequest>({
-    patientName: 'Marie Dubois', // Pre-filled for logged patient
-    patientPhone: '06 12 34 56 78',
-    patientEmail: 'marie.dubois@email.com',
+    patientName: '',
+    patientPhone: '',
+    patientEmail: '',
     appointmentType: '',
     preferredDate: '',
     preferredTime: '',
@@ -56,6 +58,38 @@ export function RequestAppointment({ onNavigate, onLogout }: RequestAppointmentP
   });
 
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    // Récupérer les informations de l'utilisateur connecté
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUser(user);
+        // Charger les informations du patient
+        await loadPatientData(user.id);
+      }
+    };
+    getUser();
+  }, []);
+
+  const loadPatientData = async (userId: string) => {
+    const { data: patient, error } = await supabase
+      .from('patients')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (patient && !error) {
+      setFormData(prev => ({
+        ...prev,
+        patientName: `${patient.first_name} ${patient.last_name}`,
+        patientPhone: patient.phone || '',
+        patientEmail: patient.email
+      }));
+    }
+  };
 
   const appointmentTypes = [
     { value: 'consultation', label: 'Consultation générale', duration: '30 min' },
@@ -75,16 +109,69 @@ export function RequestAppointment({ onNavigate, onLogout }: RequestAppointmentP
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     // Validation
     if (!formData.appointmentType || !formData.preferredDate || !formData.preferredTime || !formData.reason) {
       alert('Veuillez remplir tous les champs obligatoires');
       return;
     }
-    
-    console.log('Appointment request submitted:', formData);
-    setIsSubmitted(true);
+
+    setIsLoading(true);
+
+    try {
+      // Récupérer l'ID du patient
+      const { data: patient, error: patientError } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (patientError) throw patientError;
+
+      // Récupérer un médecin (pour l'exemple, on prend le premier)
+      const { data: doctor, error: doctorError } = await supabase
+        .from('doctors')
+        .select('id')
+        .limit(1)
+        .single();
+
+      if (doctorError) throw doctorError;
+
+      // Insérer la demande de rendez-vous
+      const { data: appointmentRequest, error: insertError } = await supabase
+        .from('appointment_requests')
+        .insert({
+          patient_id: patient.id,
+          doctor_id: doctor.id,
+          patient_name: formData.patientName,
+          patient_phone: formData.patientPhone,
+          patient_email: formData.patientEmail,
+          appointment_type: formData.appointmentType,
+          preferred_date: formData.preferredDate,
+          preferred_time: formData.preferredTime,
+          alternative_date: formData.alternativeDate || null,
+          alternative_time: formData.alternativeTime || null,
+          reason: formData.reason,
+          urgency: formData.urgency,
+          notes: formData.notes,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      console.log('Demande de rendez-vous enregistrée:', appointmentRequest);
+      setIsSubmitted(true);
+
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi de la demande:', error);
+      alert('Une erreur est survenue lors de l\'envoi de votre demande. Veuillez réessayer.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getUrgencyBadge = (urgency: string) => {
@@ -232,28 +319,30 @@ export function RequestAppointment({ onNavigate, onLogout }: RequestAppointmentP
                         id="patientName"
                         value={formData.patientName}
                         onChange={(e) => handleInputChange('patientName', e.target.value)}
-                        disabled
-                        className="bg-slate-50"
+                        required
+                        placeholder="Votre nom complet"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="patientPhone">Téléphone</Label>
+                      <Label htmlFor="patientPhone">Téléphone *</Label>
                       <Input
                         id="patientPhone"
                         value={formData.patientPhone}
                         onChange={(e) => handleInputChange('patientPhone', e.target.value)}
                         placeholder="06 12 34 56 78"
+                        required
                       />
                     </div>
                   </div>
                   <div>
-                    <Label htmlFor="patientEmail">Email</Label>
+                    <Label htmlFor="patientEmail">Email *</Label>
                     <Input
                       id="patientEmail"
                       type="email"
                       value={formData.patientEmail}
                       onChange={(e) => handleInputChange('patientEmail', e.target.value)}
                       placeholder="votre@email.com"
+                      required
                     />
                   </div>
                 </CardContent>
@@ -270,7 +359,10 @@ export function RequestAppointment({ onNavigate, onLogout }: RequestAppointmentP
                 <CardContent className="space-y-4">
                   <div>
                     <Label htmlFor="appointmentType">Type de consultation *</Label>
-                    <Select onValueChange={(value) => handleInputChange('appointmentType', value)}>
+                    <Select 
+                      value={formData.appointmentType} 
+                      onValueChange={(value) => handleInputChange('appointmentType', value)}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Sélectionnez le type de consultation" />
                       </SelectTrigger>
@@ -292,12 +384,16 @@ export function RequestAppointment({ onNavigate, onLogout }: RequestAppointmentP
                       onChange={(e) => handleInputChange('reason', e.target.value)}
                       placeholder="Décrivez brièvement le motif de votre consultation..."
                       rows={3}
+                      required
                     />
                   </div>
 
                   <div>
                     <Label htmlFor="urgency">Niveau d'urgence</Label>
-                    <Select value={formData.urgency} onValueChange={(value) => handleInputChange('urgency', value)}>
+                    <Select 
+                      value={formData.urgency} 
+                      onValueChange={(value: 'normal' | 'urgent' | 'emergency') => handleInputChange('urgency', value)}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Sélectionnez le niveau d'urgence" />
                       </SelectTrigger>
@@ -329,11 +425,15 @@ export function RequestAppointment({ onNavigate, onLogout }: RequestAppointmentP
                         value={formData.preferredDate}
                         onChange={(e) => handleInputChange('preferredDate', e.target.value)}
                         min={new Date().toISOString().split('T')[0]}
+                        required
                       />
                     </div>
                     <div>
                       <Label htmlFor="preferredTime">Heure préférée *</Label>
-                      <Select onValueChange={(value) => handleInputChange('preferredTime', value)}>
+                      <Select 
+                        value={formData.preferredTime} 
+                        onValueChange={(value) => handleInputChange('preferredTime', value)}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Choisir l'heure" />
                         </SelectTrigger>
@@ -359,7 +459,10 @@ export function RequestAppointment({ onNavigate, onLogout }: RequestAppointmentP
                     </div>
                     <div>
                       <Label htmlFor="alternativeTime">Heure alternative (optionnel)</Label>
-                      <Select onValueChange={(value) => handleInputChange('alternativeTime', value)}>
+                      <Select 
+                        value={formData.alternativeTime} 
+                        onValueChange={(value) => handleInputChange('alternativeTime', value)}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Choisir l'heure" />
                         </SelectTrigger>
@@ -457,9 +560,16 @@ export function RequestAppointment({ onNavigate, onLogout }: RequestAppointmentP
                   <Button 
                     type="submit"
                     className="w-full bg-blue-600 hover:bg-blue-700"
+                    disabled={isLoading}
                   >
-                    <Send className="h-4 w-4 mr-2" />
-                    Envoyer la demande
+                    {isLoading ? (
+                      <>Envoi en cours...</>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4 mr-2" />
+                        Envoyer la demande
+                      </>
+                    )}
                   </Button>
                   <p className="text-xs text-slate-500 mt-2 text-center">
                     Vous recevrez une confirmation par email
