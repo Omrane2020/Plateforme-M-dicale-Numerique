@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { DoctorSidebar } from './DoctorSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -17,405 +16,137 @@ import {
   Pill,
   Brain,
   UserCog,
-  UserCheck,
-  Loader2
+  UserCheck
 } from 'lucide-react';
-//@ts-ignore  
-import { supabase } from "../supabaseClient";
-import type { Page } from '../types/Page';
 
+import type { Page } from '../types/Page';
 interface DoctorDashboardProps {
   onNavigate: (page: Page) => void;
   onLogout: () => void;
 }
 
-interface DashboardStats {
-  icon: JSX.Element;
-  title: string;
-  value: string;
-  change: string;
-  changeType: 'positive' | 'negative' | 'neutral';
-}
-
-interface Appointment {
-  time: string;
-  patient: string;
-  type: string;
-  status: 'completed' | 'in-progress' | 'upcoming';
-}
-
-interface RecentPatient {
-  name: string;
-  age: number;
-  lastVisit: string;
-  condition: string;
-  priority: 'normal' | 'high';
-}
-
-interface SecretaryInfo {
-  name: string;
-  status: 'online' | 'offline';
-}
-
-interface SupabaseAppointment {
-  appointment_time: string;
-  patient_first_name?: string;
-  patient_last_name?: string;
-  type: string;
-  status: string;
-}
-
-interface SupabasePatient {
-  first_name: string;
-  last_name: string;
-  date_of_birth?: string;
-  medical_conditions?: string[];
-  updated_at: string;
-}
-
-interface SupabaseSecretary {
-  first_name: string;
-  last_name: string;
-  is_active: boolean;
-}
-
 export function DoctorDashboard({ onNavigate, onLogout }: DoctorDashboardProps) {
-  const [stats, setStats] = useState<DashboardStats[]>([]);
-  const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([]);
-  const [recentPatients, setRecentPatients] = useState<RecentPatient[]>([]);
-  const [secretaries, setSecretaries] = useState<SecretaryInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [doctorName, setDoctorName] = useState('Dr. Martin');
-
-  // Récupérer les données du dashboard
-  const fetchDashboardData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Récupérer le nom du médecin
-      const { data: doctorData } = await supabase
-        .from('users')
-        .select('first_name, last_name')
-        .eq('id', user.id)
-        .single();
-
-      if (doctorData) {
-        setDoctorName(`Dr. ${doctorData.first_name} ${doctorData.last_name}`);
-      }
-
-      // Récupérer les statistiques
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Récupérer le nombre total de patients
-      const { count: totalPatients } = await supabase
-        .from('patients')
-        .select('*', { count: 'exact', head: true })
-        .eq('doctor_id', user.id);
-
-      // Récupérer les rendez-vous du jour
-      const { data: todayAppts, count: todayAppointmentsCount } = await supabase
-        .from('appointments')
-        .select('*', { count: 'exact' })
-        .eq('doctor_id', user.id)
-        .eq('appointment_date', today)
-        .order('appointment_time', { ascending: true });
-
-      // Récupérer les rendez-vous à venir
-      const { data: upcomingAppts } = await supabase
-        .from('appointments')
-        .select('*')
-        .eq('doctor_id', user.id)
-        .eq('appointment_date', today)
-        .in('status', ['scheduled', 'confirmed'])
-        .gte('appointment_time', new Date().toLocaleTimeString('en-US', { hour12: false }));
-
-      // Récupérer les prescriptions du mois
-      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-      const { count: monthlyPrescriptions } = await supabase
-        .from('prescriptions')
-        .select('*', { count: 'exact', head: true })
-        .eq('doctor_id', user.id)
-        .gte('created_at', startOfMonth);
-
-      // Récupérer les interactions médicamenteuses
-      const { count: detectedInteractions } = await supabase
-        .from('drug_interactions')
-        .select('*', { count: 'exact', head: true })
-        .eq('doctor_id', user.id)
-        .eq('resolved', false);
-
-      // Récupérer les secrétaires actives
-      const { data: secretariesData } = await supabase
-        .from('users')
-        .select('first_name, last_name, is_active')
-        .eq('role', 'secretary')
-        .eq('is_active', true);
-
-      // Mettre à jour les statistiques
-      const updatedStats: DashboardStats[] = [
-        {
-          icon: <Users className="h-6 w-6 text-blue-600" />,
-          title: "Patients suivis",
-          value: totalPatients?.toString() || "127",
-          change: "+5 ce mois",
-          changeType: "positive"
-        },
-        {
-          icon: <Calendar className="h-6 w-6 text-green-600" />,
-          title: "RDV aujourd'hui",
-          value: todayAppointmentsCount?.toString() || "8",
-          change: `${upcomingAppts?.length || 2} à venir`,
-          changeType: "neutral"
-        },
-        {
-          icon: <Clock className="h-6 w-6 text-orange-600" />,
-          title: "Temps moyen/consultation",
-          value: "22 min",
-          change: "-3 min vs mois dernier",
-          changeType: "positive"
-        },
-        {
-          icon: <TrendingUp className="h-6 w-6 text-purple-600" />,
-          title: "Taux de satisfaction",
-          value: "4.8/5",
-          change: "+0.2 ce mois",
-          changeType: "positive"
-        },
-        {
-          icon: <FileText className="h-6 w-6 text-green-600" />,
-          title: "Prescriptions ce mois",
-          value: monthlyPrescriptions?.toString() || "34",
-          change: "+8 vs mois dernier",
-          changeType: "positive"
-        },
-        {
-          icon: <Pill className="h-6 w-6 text-blue-600" />,
-          title: "Interactions détectées",
-          value: detectedInteractions?.toString() || "2",
-          change: "IA activée",
-          changeType: "neutral"
-        },
-        {
-          icon: <UserCog className="h-6 w-6 text-purple-600" />,
-          title: "Secrétaires actives",
-          value: secretariesData?.length?.toString() || "2",
-          change: `${secretariesData?.length || 3} total`,
-          changeType: "neutral"
-        }
-      ];
-
-      setStats(updatedStats);
-
-      // Mettre à jour les rendez-vous du jour
-      if (todayAppts) {
-        const appointments: Appointment[] = todayAppts.slice(0, 6).map((apt: SupabaseAppointment) => ({
-          time: apt.appointment_time.substring(0, 5),
-          patient: `${apt.patient_first_name || ''} ${apt.patient_last_name || ''}`.trim() || 'Patient',
-          type: apt.type,
-          status: apt.status as 'completed' | 'in-progress' | 'upcoming'
-        }));
-        setTodayAppointments(appointments);
-      } else {
-        setTodayAppointments(getDefaultAppointments());
-      }
-
-      // Mettre à jour les patients récents
-      const { data: recentPatientsData } = await supabase
-        .from('patients')
-        .select('first_name, last_name, date_of_birth, medical_conditions, updated_at')
-        .eq('doctor_id', user.id)
-        .order('updated_at', { ascending: false })
-        .limit(4);
-
-      if (recentPatientsData) {
-        const patients: RecentPatient[] = recentPatientsData.map((patient: SupabasePatient) => ({
-          name: `${patient.first_name} ${patient.last_name}`,
-          age: patient.date_of_birth ? new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear() : 0,
-          lastVisit: formatLastVisit(patient.updated_at),
-          condition: patient.medical_conditions?.[0] || 'Consultation générale',
-          priority: Math.random() > 0.8 ? 'high' : 'normal'
-        }));
-        setRecentPatients(patients);
-      } else {
-        setRecentPatients(getDefaultPatients());
-      }
-
-      // Mettre à jour les secrétaires
-      if (secretariesData) {
-        const secretariesList: SecretaryInfo[] = secretariesData.map((sec: SupabaseSecretary) => ({
-          name: `${sec.first_name} ${sec.last_name}`,
-          status: 'online'
-        }));
-        setSecretaries(secretariesList);
-      } else {
-        setSecretaries(getDefaultSecretaries());
-      }
-
-    } catch (error) {
-      console.error('Erreur lors du chargement du dashboard:', error);
-      // Charger les données par défaut en cas d'erreur
-      setStats(getDefaultStats());
-      setTodayAppointments(getDefaultAppointments());
-      setRecentPatients(getDefaultPatients());
-      setSecretaries(getDefaultSecretaries());
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Fonction pour formater la dernière visite
-  const formatLastVisit = (dateString: string): string => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
-    if (diffInHours < 24) return 'Aujourd\'hui';
-    if (diffInHours < 48) return 'Hier';
-    return `Il y a ${Math.floor(diffInHours / 24)} jours`;
-  };
-
-  // Données par défaut
-  const getDefaultStats = (): DashboardStats[] => [
+  const stats = [
     {
       icon: <Users className="h-6 w-6 text-blue-600" />,
       title: "Patients suivis",
       value: "127",
       change: "+5 ce mois",
-      changeType: "positive"
+      changeType: "positive" 
     },
     {
       icon: <Calendar className="h-6 w-6 text-green-600" />,
       title: "RDV aujourd'hui",
       value: "8",
       change: "2 à venir",
-      changeType: "neutral"
+      changeType: "neutral" as const
     },
     {
       icon: <Clock className="h-6 w-6 text-orange-600" />,
       title: "Temps moyen/consultation",
       value: "22 min",
       change: "-3 min vs mois dernier",
-      changeType: "positive"
+      changeType: "positive" as const
     },
     {
       icon: <TrendingUp className="h-6 w-6 text-purple-600" />,
       title: "Taux de satisfaction",
       value: "4.8/5",
       change: "+0.2 ce mois",
-      changeType: "positive"
+      changeType: "positive" as const
     },
     {
       icon: <FileText className="h-6 w-6 text-green-600" />,
       title: "Prescriptions ce mois",
       value: "34",
       change: "+8 vs mois dernier",
-      changeType: "positive"
+      changeType: "positive" as const
     },
     {
       icon: <Pill className="h-6 w-6 text-blue-600" />,
       title: "Interactions détectées",
       value: "2",
       change: "IA activée",
-      changeType: "neutral"
+      changeType: "neutral" as const
     },
     {
       icon: <UserCog className="h-6 w-6 text-purple-600" />,
       title: "Secrétaires actives",
       value: "2",
       change: "3 total",
-      changeType: "neutral"
+      changeType: "neutral" as const
     }
   ];
 
-  const getDefaultAppointments = (): Appointment[] => [
+  const todayAppointments = [
     {
       time: "09:00",
       patient: "Marie Dubois",
       type: "Consultation de suivi",
-      status: "completed"
+      status: "completed" as const
     },
     {
       time: "09:30",
       patient: "Pierre Martin",
       type: "Contrôle tension",
-      status: "completed"
+      status: "completed" as const
     },
     {
       time: "10:15",
       patient: "Sophie Lambert",
       type: "Consultation générale",
-      status: "in-progress"
+      status: "in-progress" as const
     },
     {
       time: "11:00",
       patient: "Jean Dupont",
       type: "Résultats analyses",
-      status: "upcoming"
+      status: "upcoming" as const
     },
     {
       time: "14:00",
       patient: "Anne Moreau",
       type: "Première consultation",
-      status: "upcoming"
+      status: "upcoming" as const
     },
     {
       time: "15:30",
       patient: "Paul Leclerc",
       type: "Suivi traitement",
-      status: "upcoming"
+      status: "upcoming" as const
     }
   ];
 
-  const getDefaultPatients = (): RecentPatient[] => [
+  const recentPatients = [
     {
       name: "Marie Dubois",
       age: 45,
       lastVisit: "Aujourd'hui",
       condition: "Hypertension",
-      priority: "normal"
+      priority: "normal" as const
     },
     {
       name: "Pierre Martin",
       age: 67,
       lastVisit: "Aujourd'hui",
       condition: "Diabète type 2",
-      priority: "high"
+      priority: "high" as const
     },
     {
       name: "Sophie Lambert",
       age: 34,
       lastVisit: "Hier",
       condition: "Contrôle grossesse",
-      priority: "normal"
+      priority: "normal" as const
     },
     {
       name: "Jean Dupont",
       age: 52,
       lastVisit: "Il y a 3 jours",
       condition: "Cholestérol",
-      priority: "normal"
+      priority: "normal" as const
     }
   ];
-
-  const getDefaultSecretaries = (): SecretaryInfo[] => [
-    {
-      name: "Sarah Dubois",
-      status: "online"
-    },
-    {
-      name: "Marine Lambert",
-      status: "online"
-    },
-    {
-      name: "Julie Martin",
-      status: "offline"
-    }
-  ];
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -436,20 +167,6 @@ export function DoctorDashboard({ onNavigate, onLogout }: DoctorDashboardProps) 
       <CheckCircle className="h-4 w-4 text-green-600" />;
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen bg-slate-50">
-        <DoctorSidebar onNavigate={onNavigate} onLogout={onLogout} currentPage="doctor-dashboard" />
-        <div className="flex-1 p-8 flex items-center justify-center">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
-            <p className="text-gray-600">Chargement du tableau de bord...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex min-h-screen bg-slate-50">
       <DoctorSidebar 
@@ -463,7 +180,7 @@ export function DoctorDashboard({ onNavigate, onLogout }: DoctorDashboardProps) 
         <div className="mb-8">
           <h1 className="text-3xl text-slate-800 mb-2">Tableau de bord</h1>
           <p className="text-slate-600">
-            Bonjour {doctorName}, voici un aperçu de votre activité
+            Bonjour Dr. Martin, voici un aperçu de votre activité
           </p>
         </div>
 
@@ -548,11 +265,7 @@ export function DoctorDashboard({ onNavigate, onLogout }: DoctorDashboardProps) 
               <CardContent>
                 <div className="space-y-4">
                   {recentPatients.map((patient, index) => (
-                    <div 
-                      key={index} 
-                      className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
-                      onClick={() => onNavigate('patient-management')}
-                    >
+                    <div key={index} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
                       <div className="flex items-center space-x-3">
                         <div className="bg-blue-100 p-2 rounded-full">
                           <Heart className="h-4 w-4 text-blue-600" />
@@ -652,14 +365,18 @@ export function DoctorDashboard({ onNavigate, onLogout }: DoctorDashboardProps) 
                   </div>
                   
                   <div className="space-y-3">
-                    {secretaries.map((secretary, index) => (
-                      <div key={index} className="flex justify-between items-center text-sm">
-                        <span className="text-slate-600">{secretary.name}</span>
-                        <span className={secretary.status === 'online' ? 'text-green-600' : 'text-slate-400'}>
-                          {secretary.status === 'online' ? 'En ligne' : 'Hors ligne'}
-                        </span>
-                      </div>
-                    ))}
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-slate-600">Sarah Dubois</span>
+                      <span className="text-green-600">En ligne</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-slate-600">Marine Lambert</span>
+                      <span className="text-green-600">En ligne</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-slate-600">Julie Martin</span>
+                      <span className="text-slate-400">Hors ligne</span>
+                    </div>
                   </div>
                   
                   <div className="pt-2 border-t border-slate-200">

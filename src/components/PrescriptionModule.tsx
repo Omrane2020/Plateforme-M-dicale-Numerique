@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import  { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -17,12 +17,8 @@ import {
   Pill,
   Brain,
   Save,
-  Send,
-  Loader
+  Send
 } from 'lucide-react';
-//@ts-ignore
-import { supabase } from '../supabaseClient';
-import { toast } from 'sonner';
 
 interface Medication {
   id: string;
@@ -31,8 +27,6 @@ interface Medication {
   frequency: string;
   duration: string;
   instructions: string;
-  quantity?: number;
-  refills?: number;
 }
 
 interface DrugInteraction {
@@ -53,47 +47,21 @@ interface PrescriptionModuleProps {
     conditions: string[];
   };
   onClose: () => void;
-  doctorId: string;
 }
 
-export function PrescriptionModule({ selectedPatient, onClose, doctorId }: PrescriptionModuleProps) {
+export function PrescriptionModule({ selectedPatient, onClose }: PrescriptionModuleProps) {
   const [medications, setMedications] = useState<Medication[]>([]);
   const [recommendations, setRecommendations] = useState('');
-  const [diagnosis, setDiagnosis] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [interactions, setInteractions] = useState<DrugInteraction[]>([]);
   const [showAIAnalysis, setShowAIAnalysis] = useState(false);
-  const [medicationDatabase, setMedicationDatabase] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchMedicationDatabase();
-  }, []);
-
-  const fetchMedicationDatabase = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('medication_database')
-        .select('name')
-        .eq('is_active', true)
-        .order('name');
-
-      if (error) throw error;
-
-      setMedicationDatabase(data?.map((item:any) => item.name) || []);
-    } catch (error) {
-      console.error('Erreur lors du chargement de la base de données des médicaments:', error);
-      toast.error('Erreur lors du chargement des médicaments');
-      // Fallback à une liste basique
-      setMedicationDatabase([
-        'Paracétamol', 'Ibuprofène', 'Aspirine', 'Amoxicilline', 'Azithromycine',
-        'Oméprazole', 'Simvastatine', 'Metformine', 'Lisinopril', 'Amlodipine',
-        'Atorvastatine', 'Losartan', 'Furosémide', 'Warfarine', 'Clopidogrel'
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Mock medication database
+  const medicationDatabase = [
+    'Paracétamol', 'Ibuprofène', 'Aspirine', 'Amoxicilline', 'Azithromycine',
+    'Oméprazole', 'Simvastatine', 'Metformine', 'Lisinopril', 'Amlodipine',
+    'Atorvastatine', 'Losartan', 'Furosémide', 'Warfarine', 'Clopidogrel'
+  ];
 
   const addMedication = () => {
     const newMedication: Medication = {
@@ -102,14 +70,12 @@ export function PrescriptionModule({ selectedPatient, onClose, doctorId }: Presc
       dosage: '',
       frequency: '',
       duration: '',
-      instructions: '',
-      quantity: 1,
-      refills: 0
+      instructions: ''
     };
     setMedications([...medications, newMedication]);
   };
 
-  const updateMedication = (id: string, field: keyof Medication, value: string | number) => {
+  const updateMedication = (id: string, field: keyof Medication, value: string) => {
     setMedications(medications.map(med => 
       med.id === id ? { ...med, [field]: value } : med
     ));
@@ -117,191 +83,87 @@ export function PrescriptionModule({ selectedPatient, onClose, doctorId }: Presc
 
   const removeMedication = (id: string) => {
     setMedications(medications.filter(med => med.id !== id));
+    // Re-analyze interactions after removing medication
     if (showAIAnalysis) {
       analyzeInteractions();
     }
   };
 
   const analyzeInteractions = async () => {
-    if (!selectedPatient) return;
-
     setIsAnalyzing(true);
     setShowAIAnalysis(true);
 
-    try {
-      // Simulation d'analyse IA avec Supabase
-      const { data: analysisData, error } = await supabase
-        .from('ai_analysis_logs')
-        .insert({
-          analysis_type: 'drug_interactions',
-          input_data: {
-            patient_id: selectedPatient.id,
-            medications: medications,
-            current_medications: selectedPatient.currentMedications,
-            allergies: selectedPatient.allergies
-          },
-          confidence_score: 0.85
-        })
-        .select()
-        .single();
+    // Simulate AI analysis delay
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
-      if (error) throw error;
-
-      // Simulation du traitement IA (en production, utiliser un vrai service IA)
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const mockInteractions: DrugInteraction[] = [];
-      
-      // Logique d'analyse des interactions
-      for (let i = 0; i < medications.length; i++) {
-        for (let j = i + 1; j < medications.length; j++) {
-          const med1 = medications[i];
-          const med2 = medications[j];
-          
-          if (med1.name.toLowerCase().includes('warfarine') && med2.name.toLowerCase().includes('aspirine')) {
-            mockInteractions.push({
-              severity: 'high',
-              drug1: med1.name,
-              drug2: med2.name,
-              description: 'Risque accru de saignement',
-              recommendation: 'Surveiller étroitement la coagulation. Envisager une alternative.'
-            });
-          }
-          
-          if (med1.name.toLowerCase().includes('ibuprofène') && med2.name.toLowerCase().includes('lisinopril')) {
-            mockInteractions.push({
-              severity: 'moderate',
-              drug1: med1.name,
-              drug2: med2.name,
-              description: 'Diminution de l\'efficacité de l\'ACE inhibiteur',
-              recommendation: 'Surveiller la tension artérielle. Préférer le paracétamol.'
-            });
-          }
+    // Mock AI analysis results
+    const mockInteractions: DrugInteraction[] = [];
+    
+    // Check for interactions between new medications
+    for (let i = 0; i < medications.length; i++) {
+      for (let j = i + 1; j < medications.length; j++) {
+        const med1 = medications[i];
+        const med2 = medications[j];
+        
+        // Mock interaction detection logic
+        if (med1.name.toLowerCase().includes('warfarine') && med2.name.toLowerCase().includes('aspirine')) {
+          mockInteractions.push({
+            severity: 'high',
+            drug1: med1.name,
+            drug2: med2.name,
+            description: 'Risque accru de saignement',
+            recommendation: 'Surveiller étroitement la coagulation. Envisager une alternative.'
+          });
+        }
+        
+        if (med1.name.toLowerCase().includes('ibuprofène') && med2.name.toLowerCase().includes('lisinopril')) {
+          mockInteractions.push({
+            severity: 'moderate',
+            drug1: med1.name,
+            drug2: med2.name,
+            description: 'Diminution de l\'efficacité de l\'ACE inhibiteur',
+            recommendation: 'Surveiller la tension artérielle. Préférer le paracétamol.'
+          });
         }
       }
+    }
 
-      // Vérifier les interactions avec les médicaments actuels du patient
-      if (selectedPatient.currentMedications) {
-        medications.forEach(newMed => {
-          selectedPatient.currentMedications.forEach(currentMed => {
-            if (newMed.name.toLowerCase().includes('warfarine') && currentMed.name.toLowerCase().includes('amiodarone')) {
-              mockInteractions.push({
-                severity: 'high',
-                drug1: newMed.name,
-                drug2: currentMed.name,
-                description: 'Augmentation significative de l\'effet anticoagulant',
-                recommendation: 'Réduire la dose de warfarine de 25-50%. Surveiller l\'INR.'
-              });
-            }
-          });
+    // Check interactions with current patient medications
+    if (selectedPatient?.currentMedications) {
+      medications.forEach(newMed => {
+        selectedPatient.currentMedications.forEach(currentMed => {
+          if (newMed.name.toLowerCase().includes('warfarine') && currentMed.name.toLowerCase().includes('amiodarone')) {
+            mockInteractions.push({
+              severity: 'high',
+              drug1: newMed.name,
+              drug2: currentMed.name,
+              description: 'Augmentation significative de l\'effet anticoagulant',
+              recommendation: 'Réduire la dose de warfarine de 25-50%. Surveiller l\'INR.'
+            });
+          }
         });
-      }
+      });
+    }
 
-      // Vérifier les allergies
-      if (selectedPatient.allergies) {
-        medications.forEach(med => {
-          selectedPatient.allergies.forEach(allergy => {
-            if (med.name.toLowerCase().includes(allergy.toLowerCase())) {
-              mockInteractions.push({
-                severity: 'high',
-                drug1: med.name,
-                drug2: 'Allergie connue',
-                description: `Patient allergique à ${allergy}`,
-                recommendation: 'Contre-indication absolue. Choisir une alternative.'
-              });
-            }
-          });
+    // Check for allergies
+    if (selectedPatient?.allergies) {
+      medications.forEach(med => {
+        selectedPatient.allergies.forEach(allergy => {
+          if (med.name.toLowerCase().includes(allergy.toLowerCase())) {
+            mockInteractions.push({
+              severity: 'high',
+              drug1: med.name,
+              drug2: 'Allergie connue',
+              description: `Patient allergique à ${allergy}`,
+              recommendation: 'Contre-indication absolue. Choisir une alternative.'
+            });
+          }
         });
-      }
-
-      setInteractions(mockInteractions);
-
-      // Sauvegarder les résultats d'analyse
-      await supabase
-        .from('ai_analysis_logs')
-        .update({
-          output_data: { interactions: mockInteractions },
-          confidence_score: mockInteractions.length > 0 ? 0.92 : 0.95
-        })
-        .eq('id', analysisData.id);
-
-    } catch (error) {
-      console.error('Erreur lors de l\'analyse IA:', error);
-      toast.error('Erreur lors de l\'analyse des interactions');
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const savePrescription = async (sendToPatient: boolean = false) => {
-    if (!selectedPatient) {
-      toast.error('Aucun patient sélectionné');
-      return;
+      });
     }
 
-    try {
-      // Créer la prescription
-      const { data: prescriptionData, error: prescriptionError } = await supabase
-        .from('prescriptions')
-        .insert({
-          patient_id: selectedPatient.id,
-          doctor_id: doctorId,
-          status: sendToPatient ? 'active' : 'draft',
-          recommendations: recommendations,
-          diagnosis: diagnosis,
-          notes: `Prescription ${sendToPatient ? 'envoyée' : 'sauvegardée'} le ${new Date().toLocaleDateString('fr-FR')}`
-        })
-        .select()
-        .single();
-
-      if (prescriptionError) throw prescriptionError;
-
-      // Ajouter les médicaments prescrits
-      const medicationsToInsert = medications.map(med => ({
-        prescription_id: prescriptionData.id,
-        medication_name: med.name,
-        dosage: med.dosage,
-        frequency: med.frequency,
-        duration: med.duration,
-        instructions: med.instructions,
-        quantity: med.quantity || 1,
-        refills: med.refills || 0
-      }));
-
-      const { error: medicationsError } = await supabase
-        .from('prescription_medications')
-        .insert(medicationsToInsert);
-
-      if (medicationsError) throw medicationsError;
-
-      // Sauvegarder les interactions détectées
-      if (interactions.length > 0) {
-        const interactionsToInsert = interactions.map(interaction => ({
-          prescription_id: prescriptionData.id,
-          severity: interaction.severity,
-          drug1_name: interaction.drug1,
-          drug2_name: interaction.drug2,
-          description: interaction.description,
-          recommendation: interaction.recommendation
-        }));
-
-        await supabase
-          .from('drug_interactions')
-          .insert(interactionsToInsert);
-      }
-
-      toast.success(
-        sendToPatient 
-          ? 'Prescription envoyée au patient avec succès !' 
-          : 'Prescription sauvegardée avec succès !'
-      );
-
-      onClose();
-
-    } catch (error) {
-      console.error('Erreur lors de la sauvegarde de la prescription:', error);
-      toast.error('Erreur lors de la sauvegarde de la prescription');
-    }
+    setInteractions(mockInteractions);
+    setIsAnalyzing(false);
   };
 
   const getSeverityColor = (severity: string) => {
@@ -322,18 +184,18 @@ export function PrescriptionModule({ selectedPatient, onClose, doctorId }: Presc
     }
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <Card className="shadow-sm border-0">
-          <CardContent className="p-8 text-center">
-            <Loader className="h-8 w-8 animate-spin mx-auto text-blue-600 mb-4" />
-            <p className="text-slate-600">Chargement de la base de données des médicaments...</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const savePrescription = () => {
+    // Mock save functionality
+    console.log('Prescription sauvegardée:', {
+      patient: selectedPatient?.name,
+      medications,
+      recommendations,
+      interactions
+    });
+    
+    // Close the module
+    onClose();
+  };
 
   return (
     <div className="space-y-6">
@@ -375,21 +237,6 @@ export function PrescriptionModule({ selectedPatient, onClose, doctorId }: Presc
         </Card>
       )}
 
-      {/* Diagnosis */}
-      <Card className="shadow-sm border-0">
-        <CardHeader>
-          <CardTitle className="text-lg text-slate-800">Diagnostic</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Input
-            value={diagnosis}
-            onChange={(e) => setDiagnosis(e.target.value)}
-            placeholder="Diagnostic principal..."
-            className="mb-4"
-          />
-        </CardContent>
-      </Card>
-
       {/* Medications */}
       <Card className="shadow-sm border-0">
         <CardHeader className="flex flex-row items-center justify-between">
@@ -406,7 +253,7 @@ export function PrescriptionModule({ selectedPatient, onClose, doctorId }: Presc
           <div className="space-y-4">
             {medications.map((medication) => (
               <div key={medication.id} className="p-4 border border-slate-200 rounded-lg">
-                <div className="grid md:grid-cols-2 lg:grid-cols-6 gap-4">
+                <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4">
                   <div>
                     <Label htmlFor={`med-name-${medication.id}`}>Médicament</Label>
                     <Select onValueChange={(value) => updateMedication(medication.id, 'name', value)}>
@@ -457,18 +304,6 @@ export function PrescriptionModule({ selectedPatient, onClose, doctorId }: Presc
                       value={medication.duration}
                       onChange={(e) => updateMedication(medication.id, 'duration', e.target.value)}
                       placeholder="ex: 7 jours"
-                      className="mt-1"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor={`quantity-${medication.id}`}>Quantité</Label>
-                    <Input
-                      id={`quantity-${medication.id}`}
-                      type="number"
-                      value={medication.quantity || 1}
-                      onChange={(e) => updateMedication(medication.id, 'quantity', parseInt(e.target.value))}
-                      min="1"
                       className="mt-1"
                     />
                   </div>
@@ -524,7 +359,7 @@ export function PrescriptionModule({ selectedPatient, onClose, doctorId }: Presc
               >
                 {isAnalyzing ? (
                   <>
-                    <Loader className="h-4 w-4 mr-2 animate-spin" />
+                    <Clock className="h-4 w-4 mr-2 animate-spin" />
                     Analyse...
                   </>
                 ) : (
@@ -611,14 +446,14 @@ export function PrescriptionModule({ selectedPatient, onClose, doctorId }: Presc
         </Button>
         <div className="flex space-x-3">
           <Button 
-            onClick={() => savePrescription(false)}
+            onClick={savePrescription}
             className="bg-green-600 hover:bg-green-700"
           >
             <Save className="h-4 w-4 mr-2" />
             Sauvegarder
           </Button>
           <Button 
-            onClick={() => savePrescription(true)}
+            onClick={savePrescription}
             className="bg-blue-600 hover:bg-blue-700"
           >
             <Send className="h-4 w-4 mr-2" />

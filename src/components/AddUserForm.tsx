@@ -17,8 +17,6 @@ import {
   EyeOff
 } from 'lucide-react';
 import { toast } from 'sonner';
-//@ts-ignore
-import { supabase } from "../supabaseClient";
 
 interface AddUserFormProps {
   onNavigate: (page: string) => void;
@@ -28,7 +26,6 @@ interface AddUserFormProps {
 export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRole, setSelectedRole] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     // Informations personnelles
     firstName: '',
@@ -52,7 +49,7 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
     
     // Spécifique secrétaire
     department: '',
-    assignedDoctors: [] as string[],
+    assignedDoctors: [],
     
     // Permissions
     permissions: {
@@ -105,123 +102,23 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     
     // Validation
     if (formData.password !== formData.confirmPassword) {
       toast.error('Les mots de passe ne correspondent pas');
-      setIsLoading(false);
       return;
     }
 
     if (!selectedRole) {
       toast.error('Veuillez sélectionner un rôle');
-      setIsLoading(false);
       return;
     }
 
-    if (selectedRole === 'doctor' && !formData.speciality) {
-      toast.error('Veuillez sélectionner une spécialité pour le médecin');
-      setIsLoading(false);
-      return;
-    }
-
-    if (selectedRole === 'secretary' && !formData.department) {
-      toast.error('Veuillez sélectionner un département pour la secrétaire');
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      // 1. Créer l'utilisateur dans la table users
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .insert([
-          {
-            email: formData.email,
-            password_hash: formData.password, // Dans un cas réel, il faudrait hasher le mot de passe
-            role: selectedRole,
-            first_name: formData.firstName,
-            last_name: formData.lastName,
-            phone: formData.phone,
-            address: formData.address,
-            city: formData.city,
-            postal_code: formData.postalCode,
-            date_of_birth: formData.dateOfBirth || null,
-            gender: formData.gender || null,
-            is_active: true
-          }
-        ])
-        .select()
-        .single();
-
-      if (userError) throw userError;
-
-      const userId = user.id;
-
-      // 2. Créer les permissions
-      const { error: permissionsError } = await supabase
-        .from('user_permissions')
-        .insert([
-          {
-            user_id: userId,
-            can_view_patients: formData.permissions.canViewPatients,
-            can_edit_patients: formData.permissions.canEditPatients,
-            can_manage_appointments: formData.permissions.canManageAppointments,
-            can_view_reports: formData.permissions.canViewReports,
-            can_manage_users: formData.permissions.canManageUsers,
-            can_access_settings: formData.permissions.canAccessSettings
-          }
-        ]);
-
-      if (permissionsError) throw permissionsError;
-
-      // 3. Créer l'entrée spécifique selon le rôle
-      if (selectedRole === 'doctor') {
-        const { error: doctorError } = await supabase
-          .from('doctors')
-          .insert([
-            {
-              user_id: userId,
-              speciality: formData.speciality,
-              license_number: formData.licenseNumber || null,
-              experience_years: formData.experience ? parseInt(formData.experience) : null
-            }
-          ]);
-
-        if (doctorError) throw doctorError;
-      }
-
-      if (selectedRole === 'secretary') {
-        const { error: secretaryError } = await supabase
-          .from('secretaries')
-          .insert([
-            {
-              user_id: userId,
-              department: formData.department,
-              assigned_doctors: formData.assignedDoctors
-            }
-          ]);
-
-        if (secretaryError) throw secretaryError;
-      }
-
-      toast.success('Utilisateur créé avec succès');
-      onNavigate('user-management');
-
-    } catch (error: any) {
-      console.error('Erreur lors de la création de l\'utilisateur:', error);
-      
-      if (error.code === '23505') {
-        toast.error('Un utilisateur avec cet email existe déjà');
-      } else {
-        toast.error('Erreur lors de la création de l\'utilisateur');
-      }
-    } finally {
-      setIsLoading(false);
-    }
+    // Simulation de création
+    toast.success('Utilisateur créé avec succès');
+    onNavigate('user-management');
   };
 
   const getRoleIcon = (role: string) => {
@@ -242,32 +139,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
     }
   };
 
-  // Fonction pour récupérer la liste des médecins (pour l'assignation aux secrétaires)
-  const [doctors, setDoctors] = useState<any[]>([]);
-  
-  React.useEffect(() => {
-    const fetchDoctors = async () => {
-      if (selectedRole === 'secretary') {
-        const { data, error } = await supabase
-          .from('users')
-          .select(`
-            id,
-            first_name,
-            last_name,
-            doctors!inner (speciality)
-          `)
-          .eq('role', 'doctor')
-          .eq('is_active', true);
-
-        if (!error && data) {
-          setDoctors(data);
-        }
-      }
-    };
-
-    fetchDoctors();
-  }, [selectedRole]);
-
   return (
     <div className="flex h-screen bg-gray-50">
       <AdminSidebar onNavigate={onNavigate} onLogout={onLogout} />
@@ -281,7 +152,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                 variant="outline" 
                 size="sm"
                 onClick={() => onNavigate('user-management')}
-                disabled={isLoading}
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Retour
@@ -309,8 +179,8 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                         selectedRole === role
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-gray-200 hover:border-gray-300'
-                      } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      onClick={() => !isLoading && setSelectedRole(role)}
+                      }`}
+                      onClick={() => setSelectedRole(role)}
                     >
                       <div className="flex items-center space-x-3">
                         {getRoleIcon(role)}
@@ -344,7 +214,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                         value={formData.firstName}
                         onChange={(e) => handleChange('firstName', e.target.value)}
                         required
-                        disabled={isLoading}
                       />
                     </div>
                     <div>
@@ -354,7 +223,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                         value={formData.lastName}
                         onChange={(e) => handleChange('lastName', e.target.value)}
                         required
-                        disabled={isLoading}
                       />
                     </div>
                   </div>
@@ -367,7 +235,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                       value={formData.email}
                       onChange={(e) => handleChange('email', e.target.value)}
                       required
-                      disabled={isLoading}
                     />
                   </div>
 
@@ -378,7 +245,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                       type="tel"
                       value={formData.phone}
                       onChange={(e) => handleChange('phone', e.target.value)}
-                      disabled={isLoading}
                     />
                   </div>
 
@@ -388,7 +254,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                       id="address"
                       value={formData.address}
                       onChange={(e) => handleChange('address', e.target.value)}
-                      disabled={isLoading}
                     />
                   </div>
 
@@ -399,7 +264,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                         id="city"
                         value={formData.city}
                         onChange={(e) => handleChange('city', e.target.value)}
-                        disabled={isLoading}
                       />
                     </div>
                     <div>
@@ -408,7 +272,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                         id="postalCode"
                         value={formData.postalCode}
                         onChange={(e) => handleChange('postalCode', e.target.value)}
-                        disabled={isLoading}
                       />
                     </div>
                   </div>
@@ -431,14 +294,11 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                         onChange={(e) => handleChange('password', e.target.value)}
                         required
                         className="pr-10"
-                        disabled={isLoading}
-                        minLength={6}
                       />
                       <button
                         type="button"
                         className="absolute right-3 top-1/2 transform -translate-y-1/2"
                         onClick={() => setShowPassword(!showPassword)}
-                        disabled={isLoading}
                       >
                         {showPassword ? (
                           <EyeOff className="w-4 h-4 text-gray-400" />
@@ -457,8 +317,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                       value={formData.confirmPassword}
                       onChange={(e) => handleChange('confirmPassword', e.target.value)}
                       required
-                      disabled={isLoading}
-                      minLength={6}
                     />
                   </div>
 
@@ -467,11 +325,7 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                     <>
                       <div>
                         <Label htmlFor="speciality">Spécialité *</Label>
-                        <Select 
-                          value={formData.speciality} 
-                          onValueChange={(value) => handleChange('speciality', value)}
-                          disabled={isLoading}
-                        >
+                        <Select value={formData.speciality} onValueChange={(value) => handleChange('speciality', value)}>
                           <SelectTrigger>
                             <SelectValue placeholder="Sélectionner une spécialité" />
                           </SelectTrigger>
@@ -489,7 +343,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                           id="licenseNumber"
                           value={formData.licenseNumber}
                           onChange={(e) => handleChange('licenseNumber', e.target.value)}
-                          disabled={isLoading}
                         />
                       </div>
 
@@ -500,9 +353,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                           type="number"
                           value={formData.experience}
                           onChange={(e) => handleChange('experience', e.target.value)}
-                          disabled={isLoading}
-                          min="0"
-                          max="50"
                         />
                       </div>
                     </>
@@ -511,11 +361,7 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                   {selectedRole === 'secretary' && (
                     <div>
                       <Label htmlFor="department">Département *</Label>
-                      <Select 
-                        value={formData.department} 
-                        onValueChange={(value) => handleChange('department', value)}
-                        disabled={isLoading}
-                      >
+                      <Select value={formData.department} onValueChange={(value) => handleChange('department', value)}>
                         <SelectTrigger>
                           <SelectValue placeholder="Sélectionner un département" />
                         </SelectTrigger>
@@ -545,7 +391,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                         id="canViewPatients"
                         checked={formData.permissions.canViewPatients}
                         onCheckedChange={(checked) => handlePermissionChange('canViewPatients', checked as boolean)}
-                        disabled={isLoading}
                       />
                       <Label htmlFor="canViewPatients">Voir les patients</Label>
                     </div>
@@ -555,7 +400,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                         id="canEditPatients"
                         checked={formData.permissions.canEditPatients}
                         onCheckedChange={(checked) => handlePermissionChange('canEditPatients', checked as boolean)}
-                        disabled={isLoading}
                       />
                       <Label htmlFor="canEditPatients">Modifier les patients</Label>
                     </div>
@@ -565,7 +409,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                         id="canManageAppointments"
                         checked={formData.permissions.canManageAppointments}
                         onCheckedChange={(checked) => handlePermissionChange('canManageAppointments', checked as boolean)}
-                        disabled={isLoading}
                       />
                       <Label htmlFor="canManageAppointments">Gérer les RDV</Label>
                     </div>
@@ -575,7 +418,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                         id="canViewReports"
                         checked={formData.permissions.canViewReports}
                         onCheckedChange={(checked) => handlePermissionChange('canViewReports', checked as boolean)}
-                        disabled={isLoading}
                       />
                       <Label htmlFor="canViewReports">Voir les rapports</Label>
                     </div>
@@ -587,7 +429,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                             id="canManageUsers"
                             checked={formData.permissions.canManageUsers}
                             onCheckedChange={(checked) => handlePermissionChange('canManageUsers', checked as boolean)}
-                            disabled={isLoading}
                           />
                           <Label htmlFor="canManageUsers">Gérer les utilisateurs</Label>
                         </div>
@@ -597,7 +438,6 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                             id="canAccessSettings"
                             checked={formData.permissions.canAccessSettings}
                             onCheckedChange={(checked) => handlePermissionChange('canAccessSettings', checked as boolean)}
-                            disabled={isLoading}
                           />
                           <Label htmlFor="canAccessSettings">Accès aux paramètres</Label>
                         </div>
@@ -614,17 +454,12 @@ export function AddUserForm({ onNavigate, onLogout }: AddUserFormProps) {
                 type="button" 
                 variant="outline"
                 onClick={() => onNavigate('user-management')}
-                disabled={isLoading}
               >
                 Annuler
               </Button>
-              <Button 
-                type="submit" 
-                className="bg-blue-600 hover:bg-blue-700"
-                disabled={isLoading}
-              >
+              <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
                 <Save className="w-4 h-4 mr-2" />
-                {isLoading ? 'Création...' : 'Créer l\'utilisateur'}
+                Créer l'utilisateur
               </Button>
             </div>
           </form>

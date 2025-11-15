@@ -18,14 +18,11 @@ import {
 } from 'lucide-react';
 import type { Page } from '../types/Page';
 import type { UserType } from '../types/UserType';
-
-
-//@ts-ignore
-import { supabase } from "../supabaseClient";
 interface AddPatientFormProps {
   onNavigate: (page: Page) => void;
   onLogout: () => void;
   userType: UserType;
+
 }
 
 interface PatientData {
@@ -72,7 +69,6 @@ export function AddPatientForm({ onNavigate, onLogout, userType }: AddPatientFor
   const [newCondition, setNewCondition] = useState('');
   const [newAllergy, setNewAllergy] = useState('');
   const [newMedication, setNewMedication] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
 
   const handleInputChange = (field: keyof PatientData, value: string) => {
     setPatientData(prev => ({ ...prev, [field]: value }));
@@ -94,101 +90,20 @@ export function AddPatientForm({ onNavigate, onLogout, userType }: AddPatientFor
     }));
   };
 
-  const handleSavePatient = async () => {
+  const handleSavePatient = () => {
     // Validation
     if (!patientData.firstName || !patientData.lastName || !patientData.dateOfBirth) {
       alert('Veuillez remplir les champs obligatoires');
       return;
     }
 
-    setIsLoading(true);
-
-    try {
-      // Insertion du patient principal
-      const { data: patient, error: patientError } = await supabase
-        .from('patients')
-        .insert([
-          {
-            first_name: patientData.firstName,
-            last_name: patientData.lastName,
-            date_of_birth: patientData.dateOfBirth,
-            gender: patientData.gender,
-            address: patientData.address,
-            city: patientData.city,
-            postal_code: patientData.postalCode,
-            phone: patientData.phone,
-            email: patientData.email,
-            emergency_contact: patientData.emergencyContact,
-            emergency_phone: patientData.emergencyPhone,
-            blood_type: patientData.bloodType,
-            insurance: patientData.insurance,
-            doctor_notes: patientData.doctorNotes
-          }
-        ])
-        .select()
-        .single();
-
-      if (patientError) throw patientError;
-
-      const patientId = patient.id;
-
-      // Insertion des antécédents médicaux
-      if (patientData.medicalHistory.length > 0) {
-        const medicalHistoryData = patientData.medicalHistory.map(condition => ({
-          patient_id: patientId,
-          condition_name: condition
-        }));
-
-        const { error: medicalHistoryError } = await supabase
-          .from('medical_histories')
-          .insert(medicalHistoryData);
-
-        if (medicalHistoryError) throw medicalHistoryError;
-      }
-
-      // Insertion des allergies
-      if (patientData.allergies.length > 0) {
-        const allergiesData = patientData.allergies.map(allergy => ({
-          patient_id: patientId,
-          allergy_name: allergy
-        }));
-
-        const { error: allergiesError } = await supabase
-          .from('allergies')
-          .insert(allergiesData);
-
-        if (allergiesError) throw allergiesError;
-      }
-
-      // Insertion des médicaments actuels
-      if (patientData.currentMedications.length > 0) {
-        const medicationsData = patientData.currentMedications.map(medication => ({
-          patient_id: patientId,
-          medication_name: medication
-        }));
-
-        const { error: medicationsError } = await supabase
-          .from('current_medications')
-          .insert(medicationsData);
-
-        if (medicationsError) throw medicationsError;
-      }
-
-      console.log('Patient enregistré avec succès:', patient);
-      alert('Patient enregistré avec succès!');
-
-      // Navigate back based on user type
-      if (userType === 'secretary') {
-        onNavigate('secretary-dashboard');
-      } else {
-        onNavigate('patient-management');
-      }
-
-    } catch (error) {
-      console.error('Erreur lors de l\'enregistrement du patient:', error);
-      alert('Erreur lors de l\'enregistrement du patient. Veuillez réessayer.');
-    } finally {
-      setIsLoading(false);
+    console.log('Patient data saved:', patientData);
+    
+    // Navigate back based on user type
+    if (userType === 'secretary') {
+      onNavigate('secretary-dashboard');
+    } else {
+      onNavigate('patient-management');
     }
   };
 
@@ -590,16 +505,14 @@ export function AddPatientForm({ onNavigate, onLogout, userType }: AddPatientFor
                   <Button 
                     onClick={handleSavePatient}
                     className="w-full bg-blue-600 hover:bg-blue-700"
-                    disabled={isLoading}
                   >
                     <Save className="h-4 w-4 mr-2" />
-                    {isLoading ? 'Enregistrement...' : 'Enregistrer le patient'}
+                    Enregistrer le patient
                   </Button>
                   <Button 
                     variant="outline" 
                     className="w-full"
                     onClick={() => isSecretary ? onNavigate('secretary-dashboard') : onNavigate('patient-management')}
-                    disabled={isLoading}
                   >
                     Annuler
                   </Button>

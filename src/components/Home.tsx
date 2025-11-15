@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+
 import { Header } from './Header';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -17,14 +17,12 @@ import {
   Stethoscope,
   Award,
   Crown,
-  ArrowRight,
-  Loader2
+  ArrowRight
 } from 'lucide-react';
 import { useSubscriptions } from '../contexts/SubscriptionContext';
+
 import type { UserType } from '../types/UserType';
 import type { Page } from '../types/Page';
-//@ts-ignore
-import {supabase} from '../supabaseClient';
 
 interface HomeProps {
   onNavigate: (page: Page) => void;
@@ -33,217 +31,62 @@ interface HomeProps {
   onLogout: () => void;
 }
 
-interface PlatformStats {
-  total_doctors: number;
-  total_patients: number;
-  total_consultations: number;
-  satisfaction_rate: number;
-  active_countries: number;
-  uptime_percentage: number;
-}
-
-interface Testimonial {
-  user_name: string;
-  user_type: string;
-  specialty?: string;
-  content: string;
-  rating: number;
-}
-
-interface PlatformFeature {
-  title: string;
-  description: string;
-  icon_name: string;
-}
-
-interface Partner {
-  name: string;
-  partnership_type: string;
-}
-
 export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomeProps) {
   const { getPlansByCategory, getActivePlans } = useSubscriptions();
   
   // Récupérer les plans actifs pour les médecins (pour affichage sur la page d'accueil)
   const activeDoctorPlans = getPlansByCategory('doctor').filter(plan => plan.active).slice(0, 3);
   
-  const [platformStats, setPlatformStats] = useState<PlatformStats>({
-    total_doctors: 0,
-    total_patients: 0,
-    total_consultations: 0,
-    satisfaction_rate: 0,
-    active_countries: 0,
-    uptime_percentage: 0
-  });
-  const [features, setFeatures] = useState<PlatformFeature[]>([]);
-  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Récupérer les données de la plateforme
-  const fetchPlatformData = async () => {
-    try {
-      // Récupérer les statistiques
-      const { data: statsData } = await supabase
-        .from('platform_statistics')
-        .select('*')
-        .order('last_updated', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (statsData) {
-        setPlatformStats(statsData);
-      }
-
-      // Récupérer les fonctionnalités
-      const { data: featuresData } = await supabase
-        .from('platform_features')
-        .select('*')
-        .eq('is_active', true)
-        .order('order_index', { ascending: true })
-        .limit(4);
-
-      if (featuresData) {
-        setFeatures(featuresData);
-      } else {
-        setFeatures(getDefaultFeatures());
-      }
-
-      // Récupérer les témoignages
-      const { data: testimonialsData } = await supabase
-        .from('testimonials')
-        .select('*')
-        .eq('is_featured', true)
-        .eq('is_approved', true)
-        .order('created_at', { ascending: false })
-        .limit(3);
-
-      if (testimonialsData) {
-        setTestimonials(testimonialsData);
-      } else {
-        setTestimonials(getDefaultTestimonials());
-      }
-
-      // Récupérer les partenaires
-      const { data: partnersData } = await supabase
-        .from('partners')
-        .select('name, partnership_type')
-        .eq('is_active', true)
-        .order('name', { ascending: true });
-
-      if (partnersData) {
-        setPartners(partnersData);
-      } else {
-        setPartners(getDefaultPartners());
-      }
-
-    } catch (error) {
-      console.error('Erreur lors du chargement des données de la plateforme:', error);
-      // Données par défaut en cas d'erreur
-      setPlatformStats(getDefaultStats());
-      setFeatures(getDefaultFeatures());
-      setTestimonials(getDefaultTestimonials());
-      setPartners(getDefaultPartners());
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Fonction pour obtenir l'icône par nom
-  const getIconComponent = (iconName: string) => {
-    const iconProps = { className: "h-8 w-8 text-blue-600" };
-    
-    switch (iconName) {
-      case 'Calendar': return <Calendar {...iconProps} />;
-      case 'FileText': return <FileText {...iconProps} />;
-      case 'Shield': return <Shield {...iconProps} />;
-      case 'Clock': return <Clock {...iconProps} />;
-      default: return <Calendar {...iconProps} />;
-    }
-  };
-
-  // Données par défaut
-  const getDefaultStats = (): PlatformStats => ({
-    total_doctors: 25000,
-    total_patients: 500000,
-    total_consultations: 2000000,
-    satisfaction_rate: 98.5,
-    active_countries: 40,
-    uptime_percentage: 99.9
-  });
-
-  const getDefaultFeatures = (): PlatformFeature[] => [
+  const features = [
     {
+      icon: <Calendar className="h-8 w-8 text-blue-600" />,
       title: "Gestion des Rendez-vous",
-      description: "Planifiez et gérez facilement vos consultations avec un système de calendrier intuitif.",
-      icon_name: "Calendar"
+      description: "Planifiez et gérez facilement vos consultations avec un système de calendrier intuitif."
     },
     {
+      icon: <FileText className="h-8 w-8 text-blue-600" />,
       title: "Dossiers Médicaux",
-      description: "Accédez aux dossiers patients de manière sécurisée et centralisée.",
-      icon_name: "FileText"
+      description: "Accédez aux dossiers patients de manière sécurisée et centralisée."
     },
     {
+      icon: <Shield className="h-8 w-8 text-green-600" />,
       title: "Sécurité Maximale",
-      description: "Vos données médicales sont protégées selon les normes les plus strictes.",
-      icon_name: "Shield"
+      description: "Vos données médicales sont protégées selon les normes les plus strictes."
     },
     {
+      icon: <Clock className="h-8 w-8 text-blue-600" />,
       title: "Gain de Temps",
-      description: "Automatisez vos tâches administratives pour vous concentrer sur vos patients.",
-      icon_name: "Clock"
+      description: "Automatisez vos tâches administratives pour vous concentrer sur vos patients."
     }
   ];
 
-  const getDefaultTestimonials = (): Testimonial[] => [
+  const testimonials = [
     {
-      user_name: "Dr. Marie Dubois",
-      user_type: "doctor",
+      name: "Dr. Marie Dubois",
       specialty: "Médecin généraliste",
       content: "Cette plateforme a révolutionné ma pratique quotidienne. La gestion des patients n'a jamais été aussi simple.",
       rating: 5
     },
     {
-      user_name: "Dr. Pierre Martin",
-      user_type: "doctor",
+      name: "Dr. Pierre Martin",
       specialty: "Cardiologue",
       content: "L'interface est intuitive et sécurisée. Mes patients apprécient la facilité de prise de rendez-vous.",
       rating: 5
     },
     {
-      user_name: "Sophie Lambert",
-      user_type: "patient",
+      name: "Sophie Lambert",
+      specialty: "Patiente",
       content: "Très pratique pour suivre mes rendez-vous et communiquer avec mon médecin traitant.",
       rating: 5
     }
   ];
 
-  const getDefaultPartners = (): Partner[] => [
-    { name: "Hôpital Saint-Louis", partnership_type: "hospital" },
-    { name: "Clinique des Champs", partnership_type: "clinic" },
-    { name: "Centre Médical Lyon", partnership_type: "medical_center" },
-    { name: "Polyclinique du Nord", partnership_type: "polyclinic" }
+  const partners = [
+    "Hôpital Saint-Louis",
+    "Clinique des Champs",
+    "Centre Médical Lyon",
+    "Polyclinique du Nord"
   ];
-
-  useEffect(() => {
-    fetchPlatformData();
-  }, []);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-white">
-        <Header 
-          onNavigate={onNavigate} 
-          isAuthenticated={isAuthenticated} 
-          userType={userType} 
-          onLogout={onLogout} 
-        />
-        <div className="flex items-center justify-center min-h-[50vh]">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -292,27 +135,19 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
               <div className="absolute -bottom-6 -left-6 bg-white p-6 rounded-xl shadow-lg">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {platformStats.total_doctors.toLocaleString()}+
-                    </div>
+                    <div className="text-2xl font-bold text-blue-600">25,000+</div>
                     <div className="text-sm text-slate-600">Médecins actifs</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {platformStats.satisfaction_rate}%
-                    </div>
+                    <div className="text-2xl font-bold text-green-600">98.5%</div>
                     <div className="text-sm text-slate-600">Satisfaction</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-600">
-                      {platformStats.total_patients.toLocaleString()}+
-                    </div>
+                    <div className="text-2xl font-bold text-purple-600">500K+</div>
                     <div className="text-sm text-slate-600">Patients</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-600">
-                      {platformStats.total_consultations.toLocaleString()}+
-                    </div>
+                    <div className="text-2xl font-bold text-orange-600">2M+</div>
                     <div className="text-sm text-slate-600">Consultations</div>
                   </div>
                 </div>
@@ -339,9 +174,7 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
               <div className="bg-blue-50 p-4 rounded-2xl w-20 h-20 flex items-center justify-center mx-auto mb-4">
                 <Users className="h-10 w-10 text-blue-600" />
               </div>
-              <div className="text-4xl font-bold text-slate-800 mb-2">
-                {platformStats.total_doctors.toLocaleString()}+
-              </div>
+              <div className="text-4xl font-bold text-slate-800 mb-2">25,000+</div>
               <div className="text-slate-600">Médecins inscrits</div>
               <div className="text-sm text-green-600 mt-1">+15% ce mois</div>
             </div>
@@ -350,9 +183,7 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
               <div className="bg-green-50 p-4 rounded-2xl w-20 h-20 flex items-center justify-center mx-auto mb-4">
                 <Heart className="h-10 w-10 text-green-600" />
               </div>
-              <div className="text-4xl font-bold text-slate-800 mb-2">
-                {platformStats.total_patients.toLocaleString()}+
-              </div>
+              <div className="text-4xl font-bold text-slate-800 mb-2">500K+</div>
               <div className="text-slate-600">Patients actifs</div>
               <div className="text-sm text-green-600 mt-1">+22% ce mois</div>
             </div>
@@ -361,9 +192,7 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
               <div className="bg-purple-50 p-4 rounded-2xl w-20 h-20 flex items-center justify-center mx-auto mb-4">
                 <Calendar className="h-10 w-10 text-purple-600" />
               </div>
-              <div className="text-4xl font-bold text-slate-800 mb-2">
-                {platformStats.total_consultations.toLocaleString()}+
-              </div>
+              <div className="text-4xl font-bold text-slate-800 mb-2">2M+</div>
               <div className="text-slate-600">Consultations réalisées</div>
               <div className="text-sm text-green-600 mt-1">+35% ce mois</div>
             </div>
@@ -372,9 +201,7 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
               <div className="bg-orange-50 p-4 rounded-2xl w-20 h-20 flex items-center justify-center mx-auto mb-4">
                 <Award className="h-10 w-10 text-orange-600" />
               </div>
-              <div className="text-4xl font-bold text-slate-800 mb-2">
-                {platformStats.satisfaction_rate}%
-              </div>
+              <div className="text-4xl font-bold text-slate-800 mb-2">98.5%</div>
               <div className="text-slate-600">Taux de satisfaction</div>
               <div className="text-sm text-green-600 mt-1">Certifié ISO</div>
             </div>
@@ -383,9 +210,7 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
           <div className="mt-16 bg-gradient-to-r from-blue-50 to-green-50 rounded-2xl p-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
               <div>
-                <div className="text-3xl font-bold text-blue-600 mb-2">
-                  {platformStats.active_countries}+
-                </div>
+                <div className="text-3xl font-bold text-blue-600 mb-2">40+</div>
                 <div className="text-slate-700">Pays utilisateurs</div>
               </div>
               <div>
@@ -393,9 +218,7 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
                 <div className="text-slate-700">Support disponible</div>
               </div>
               <div>
-                <div className="text-3xl font-bold text-purple-600 mb-2">
-                  {platformStats.uptime_percentage}%
-                </div>
+                <div className="text-3xl font-bold text-purple-600 mb-2">99.9%</div>
                 <div className="text-slate-700">Temps de disponibilité</div>
               </div>
             </div>
@@ -420,7 +243,7 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
               <Card key={index} className="text-center p-6 hover:shadow-lg transition-shadow bg-white border-0 shadow-sm">
                 <CardHeader>
                   <div className="flex justify-center mb-4">
-                    {getIconComponent(feature.icon_name)}
+                    {feature.icon}
                   </div>
                   <CardTitle className="text-xl text-slate-800">{feature.title}</CardTitle>
                 </CardHeader>
@@ -458,18 +281,12 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
                     "{testimonial.content}"
                   </p>
                   <div className="flex items-center">
-                    <div className={`p-2 rounded-full mr-3 ${
-                      testimonial.user_type === 'doctor' ? 'bg-blue-100' : 'bg-green-100'
-                    }`}>
-                      <Stethoscope className={`h-4 w-4 ${
-                        testimonial.user_type === 'doctor' ? 'text-blue-600' : 'text-green-600'
-                      }`} />
+                    <div className="bg-blue-100 p-2 rounded-full mr-3">
+                      <Stethoscope className="h-4 w-4 text-blue-600" />
                     </div>
                     <div>
-                      <p className="text-slate-800">{testimonial.user_name}</p>
-                      <p className="text-sm text-slate-600">
-                        {testimonial.specialty || 'Patient'}
-                      </p>
+                      <p className="text-slate-800">{testimonial.name}</p>
+                      <p className="text-sm text-slate-600">{testimonial.specialty}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -490,7 +307,7 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {partners.map((partner, index) => (
               <div key={index} className="bg-white p-6 rounded-lg shadow-sm text-center">
-                <p className="text-slate-700">{partner.name}</p>
+                <p className="text-slate-700">{partner}</p>
               </div>
             ))}
           </div>

@@ -1,3 +1,4 @@
+
 import { 
   LayoutDashboard, 
   Calendar,
@@ -8,11 +9,8 @@ import {
   Bell
 } from 'lucide-react';
 import { Button } from './ui/button';
-import { useEffect, useState } from 'react';
-//@ts-ignore
-import { supabase } from '../supabaseClient';
-import type { Page } from '../types/Page';
 
+import type { Page } from '../types/Page';
 interface SecretarySidebarProps {
   onNavigate: (page: Page) => void;
   onLogout: () => void;
@@ -20,10 +18,6 @@ interface SecretarySidebarProps {
 }
 
 export function SecretarySidebar({ onNavigate, onLogout, currentPage }: SecretarySidebarProps) {
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [patientsCount, setPatientsCount] = useState(0);
-  const [todayAppointments, setTodayAppointments] = useState(0);
-
   const menuItems = [
     {
       icon: <LayoutDashboard className="h-5 w-5" />,
@@ -51,50 +45,6 @@ export function SecretarySidebar({ onNavigate, onLogout, currentPage }: Secretar
     }
   ];
 
-  // Charger les données statistiques
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
-    try {
-      // Récupérer le nombre total de patients
-      const { count: patientsCount, error: patientsError } = await supabase
-        .from('patients')
-        .select('*', { count: 'exact', head: true });
-
-      if (!patientsError && patientsCount !== null) {
-        setPatientsCount(patientsCount);
-      }
-
-      // Récupérer les rendez-vous d'aujourd'hui
-      const today = new Date().toISOString().split('T')[0];
-      const { count: appointmentsCount, error: appointmentsError } = await supabase
-        .from('appointments')
-        .select('*', { count: 'exact', head: true })
-        .eq('appointment_date', today)
-        .eq('status', 'scheduled');
-
-      if (!appointmentsError && appointmentsCount !== null) {
-        setTodayAppointments(appointmentsCount);
-      }
-
-      // Récupérer les notifications non lues
-      const { count: notificationsCount, error: notificationsError } = await supabase
-        .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_read', false)
-        .eq('user_role', 'secretary');
-
-      if (!notificationsError && notificationsCount !== null) {
-        setUnreadNotifications(notificationsCount);
-      }
-
-    } catch (error) {
-      console.error('Erreur lors du chargement des données:', error);
-    }
-  };
-
   return (
     <div className="w-64 bg-white border-r border-slate-200 min-h-screen flex flex-col">
       {/* Header */}
@@ -106,18 +56,6 @@ export function SecretarySidebar({ onNavigate, onLogout, currentPage }: Secretar
           <div>
             <h2 className="text-slate-800">Secrétaire</h2>
             <p className="text-sm text-slate-500">Interface Opérationnelle</p>
-          </div>
-        </div>
-        
-        {/* Statistiques rapides */}
-        <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-          <div className="bg-blue-50 p-2 rounded">
-            <p className="font-semibold text-blue-700">{patientsCount}</p>
-            <p className="text-blue-600">Patients</p>
-          </div>
-          <div className="bg-green-50 p-2 rounded">
-            <p className="font-semibold text-green-700">{todayAppointments}</p>
-            <p className="text-green-600">RDV Auj.</p>
           </div>
         </div>
       </div>
@@ -141,14 +79,7 @@ export function SecretarySidebar({ onNavigate, onLogout, currentPage }: Secretar
                 </span>
                 <span className="ml-3">{item.label}</span>
                 {item.page === 'secretary-dashboard' && currentPage === item.page && (
-                  <div className="ml-auto flex items-center">
-                    {unreadNotifications > 0 && (
-                      <span className="bg-orange-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center mr-1">
-                        {unreadNotifications}
-                      </span>
-                    )}
-                    <Bell className="h-4 w-4 text-orange-500" />
-                  </div>
+                  <Bell className="h-4 w-4 ml-auto text-orange-500" />
                 )}
               </Button>
             </li>
