@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Stethoscope, User, Eye, EyeOff, CheckCircle } from 'lucide-react';
-
+import { register } from "../../services/authService";
 import type { Page } from '../../types/Page';
 import type { UserType } from '../../types/UserType';
 
@@ -45,39 +45,43 @@ export function Signup({ onNavigate, onLogin }: SignupProps) {
     'Urgences'
   ];
 
-const handleSignup = (userType: UserType) => {
-  if (formData.email && formData.password && formData.password === formData.confirmPassword && formData.acceptTerms) {
-if (userType === 'doctor') {
-  const trialEndsAt = new Date();
-  trialEndsAt.setDate(trialEndsAt.getDate() + 90);
+const handleSignup = async (userType: UserType) => {
+  if (!formData.email || !formData.password || formData.password !== formData.confirmPassword) {
+    alert("Veuillez vérifier vos informations");
+    return;
+  }
 
-  const doctorAccount = {
-    ...formData,
-    userType: 'doctor',
-    trialActive: true,
-    trialEndsAt: trialEndsAt.toISOString(),
-    subscriptionActive: false
+  if (!formData.acceptTerms) {
+    alert("Vous devez accepter les conditions.");
+    return;
+  }
+
+  const signupData = {
+    firstName: formData.firstName,
+    lastName: formData.lastName,
+    email: formData.email,
+    password: formData.password,
+    phone: formData.phone,
+    specialty: formData.specialty,
+    role: userType === "doctor" ? "doctor" : "patient"
   };
 
-  localStorage.setItem("doctorAccount", JSON.stringify(doctorAccount));
+  try {
+    const result = await register(signupData);
 
-  // Popup pour choisir
-  const goToSubscription = window.confirm(
-    "Votre compte a été créé. Voulez-vous choisir un abonnement maintenant ?"
-  );
-
-  if (goToSubscription) {
-    onNavigate('subscription-plans'); // Oui → page abonnement
-  } else {
-    onLogin('doctor'); // Non → dashboard avec trial actif
-  }
-}
-
-    else {
-      onLogin(userType);
+    if (result.error) {
+      alert(result.error);
+      return;
     }
+
+    alert("Compte créé avec succès !");
+    onNavigate("login");
+
+  } catch (error) {
+    alert("Erreur lors de l'inscription");
   }
 };
+
 
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

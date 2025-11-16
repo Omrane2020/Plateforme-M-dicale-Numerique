@@ -6,7 +6,7 @@ import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Stethoscope, User, Eye, EyeOff, UserCog, Shield } from 'lucide-react';
-
+import {login} from '../../services/authService'
 import type { UserType } from '../../types/UserType';
 import type { Page } from '../../types/Page';
 interface LoginProps {
@@ -21,66 +21,18 @@ export function Login({ onNavigate, onLogin }: LoginProps) {
     password: ''
   });
 
-const handleLogin = (userType: UserType) => {
-  const doctor = JSON.parse(localStorage.getItem("doctorAccount") || "null");
+const handleLogin = async (userType: UserType) => {
+  try {
+    const response = await login(formData.email, formData.password);
 
-  // --------------------------------------------------------
-  // 🔵 Connexion médecin
-  // --------------------------------------------------------
-  if (userType === "doctor") {
+    // Save token
+    localStorage.setItem("token", response.token);
+    localStorage.setItem("user", JSON.stringify(response.user));
 
-    // Aucun compte créé
-    if (!doctor) {
-      alert("Vous devez d’abord créer un compte médecin avant de vous connecter.");
-      return;
-    }
-
-    const now = new Date();
-    const trialEnd = new Date(doctor.trialEndsAt);
-
-    // Essai gratuit encore valable
-    if (doctor.trialActive && now <= trialEnd) {
-      alert(
-        `Bienvenue docteur ! Votre essai gratuit est actif jusqu’au ${trialEnd.toLocaleDateString()}.`
-      );
-      onLogin("doctor");
-      return;
-    }
-
-    // Essai terminé + aucun abonnement
-    if (!doctor.subscriptionActive) {
-      alert("Votre essai gratuit est terminé. Veuillez choisir un plan d’abonnement.");
-      onNavigate("subscription-plans");
-      return;
-    }
-
-    // Abonnement actif
-    onLogin("doctor");
-    return;
-  }
-
-  // --------------------------------------------------------
-  // 🟣 Connexion secrétaire
-  // --------------------------------------------------------
-  if (userType === "secretary") {
-    onLogin("secretary");
-    return;
-  }
-
-  // --------------------------------------------------------
-  // 🟢 Connexion patient
-  // --------------------------------------------------------
-  if (userType === "patient") {
-    onLogin("patient");
-    return;
-  }
-
-  // --------------------------------------------------------
-  // 🔴 Connexion admin
-  // --------------------------------------------------------
-  if (userType === "admin") {
-    onLogin("admin");
-    return;
+    alert("Connexion réussie !");
+    onLogin(userType);
+  } catch (error: any) {
+    alert(error.message || "Erreur de connexion");
   }
 };
 
