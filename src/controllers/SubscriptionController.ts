@@ -10,7 +10,6 @@ import SubscriptionApiService from '../services/api/subscriptionApi';
 import type { 
   CreateSubscriptionPlanDTO, 
   UpdateSubscriptionPlanDTO,
-  SubscriptionPlan 
 } from '../types/subscription';
 
 export class SubscriptionController {

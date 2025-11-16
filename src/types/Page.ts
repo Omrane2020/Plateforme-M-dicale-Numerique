@@ -26,4 +26,5 @@ export type Page =
   | 'security-center'
   | 'add-user'
   | 'subscription-plans'
-  | 'payment';
+  | 'payment'
+  |'payment/'

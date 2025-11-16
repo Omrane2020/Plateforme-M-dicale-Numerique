@@ -12,6 +12,7 @@
       CONTACT: '/contact',
       SUBSCRIPTION_PLANS: '/subscription-plans',
       PAYMENT: '/payment/:planId',
+
     },
 
     // Routes médecin

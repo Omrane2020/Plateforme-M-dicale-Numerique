@@ -1,17 +1,9 @@
-/**
- * VIEW - Page d'accueil publique
- * 
- * Utilise l'architecture MVC :
- * - Hook useSubscription (Controller)
- * - SubscriptionModel (Model) pour la logique métier
- * - Components pour l'affichage (View)
- */
 
-import { Header } from '../../components/Menu//Header';
-import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
-import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
+import { Header } from './Header';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { 
   Heart, 
   Calendar, 
@@ -27,26 +19,23 @@ import {
   Crown,
   ArrowRight
 } from 'lucide-react';
-import { useSubscription } from '../../hooks';
-import type { Page } from '../../types/Page';
-import type { UserType } from '../../types/UserType';
+import { useSubscriptions } from '../../contexts/SubscriptionContext';
 
-interface HomePageProps {
+import type { UserType } from '../../types/UserType';
+import type { Page } from '../../types/Page';
+
+interface HomeProps {
   onNavigate: (page: Page) => void;
   isAuthenticated: boolean;
   userType: UserType;
   onLogout: () => void;
 }
 
-export function HomePage({ onNavigate, isAuthenticated, userType, onLogout }: HomePageProps) {
-  // Utiliser le hook au lieu du context directement
-  const { getPlansByCategory, loading, error } = useSubscription();
+export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomeProps) {
+  const { getPlansByCategory, getActivePlans } = useSubscriptions();
   
-  // Récupérer les plans actifs pour les médecins
-  // Les plans sont déjà des SubscriptionModel avec toute la logique métier
-  const activeDoctorPlans = getPlansByCategory('doctor')
-    .filter(plan => plan.active)
-    .slice(0, 3);
+  // Récupérer les plans actifs pour les médecins (pour affichage sur la page d'accueil)
+  const activeDoctorPlans = getPlansByCategory('doctor').filter(plan => plan.active).slice(0, 3);
   
   const features = [
     {
@@ -98,17 +87,6 @@ export function HomePage({ onNavigate, isAuthenticated, userType, onLogout }: Ho
     "Centre Médical Lyon",
     "Polyclinique du Nord"
   ];
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">Erreur lors du chargement des plans</p>
-          <Button onClick={() => window.location.reload()}>Réessayer</Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -228,6 +206,23 @@ export function HomePage({ onNavigate, isAuthenticated, userType, onLogout }: Ho
               <div className="text-sm text-green-600 mt-1">Certifié ISO</div>
             </div>
           </div>
+          
+          <div className="mt-16 bg-gradient-to-r from-blue-50 to-green-50 rounded-2xl p-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+              <div>
+                <div className="text-3xl font-bold text-blue-600 mb-2">40+</div>
+                <div className="text-slate-700">Pays utilisateurs</div>
+              </div>
+              <div>
+                <div className="text-3xl font-bold text-green-600 mb-2">24/7</div>
+                <div className="text-slate-700">Support disponible</div>
+              </div>
+              <div>
+                <div className="text-3xl font-bold text-purple-600 mb-2">99.9%</div>
+                <div className="text-slate-700">Temps de disponibilité</div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -257,107 +252,6 @@ export function HomePage({ onNavigate, isAuthenticated, userType, onLogout }: Ho
                 </CardContent>
               </Card>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing Section - Plans Médecins (Utilise l'architecture MVC) */}
-      <section className="py-20 bg-gradient-to-b from-white to-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <Badge className="bg-blue-100 text-blue-700 mb-4">
-              <Stethoscope className="w-4 h-4 mr-1" />
-              Plans Médecins
-            </Badge>
-            <h2 className="text-3xl lg:text-4xl text-slate-800 mb-4">
-              Des tarifs adaptés à votre pratique
-            </h2>
-            <p className="text-xl text-slate-600 max-w-3xl mx-auto">
-              Choisissez le plan qui correspond à vos besoins et commencez votre essai gratuit de 14 jours
-            </p>
-          </div>
-
-          {loading ? (
-            <div className="text-center py-12">
-              <p className="text-slate-600">Chargement des plans...</p>
-            </div>
-          ) : (
-            <div className="grid md:grid-cols-3 gap-8 mb-12">
-              {activeDoctorPlans.map((plan) => (
-                <Card 
-                  key={plan.id} 
-                  className={`relative ${plan.popular ? 'border-2 border-blue-500 shadow-xl' : 'border border-gray-200'}`}
-                >
-                  {plan.popular && (
-                    <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                      <Badge className="bg-blue-600 text-white px-4 py-1">
-                        <Star className="w-3 h-3 mr-1" />
-                        Plus Populaire
-                      </Badge>
-                    </div>
-                  )}
-                  <CardHeader className="text-center pb-8 pt-8">
-                    <div className="mb-4">
-                      {plan.color === 'green' && <Star className="w-12 h-12 text-green-600 mx-auto" />}
-                      {plan.color === 'blue' && <Users className="w-12 h-12 text-blue-600 mx-auto" />}
-                      {plan.color === 'purple' && <Crown className="w-12 h-12 text-purple-600 mx-auto" />}
-                    </div>
-                    <CardTitle className="text-2xl mb-2">{plan.name}</CardTitle>
-                    <p className="text-slate-600 text-sm">{plan.getShortDescription(50)}</p>
-                    <div className="mt-6">
-                      <div className="flex items-baseline justify-center">
-                        <span className="text-4xl font-bold text-slate-900">{plan.monthlyPrice}€</span>
-                        <span className="text-slate-600 ml-2">/mois</span>
-                      </div>
-                      <p className="text-sm text-slate-500 mt-2">
-                        ou {plan.yearlyPrice}€/an 
-                        {/* Utiliser la logique métier du model */}
-                        (économisez {plan.calculateYearlySavings()}€ soit {plan.calculateSavingsPercentage()}%)
-                      </p>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-3 mb-8">
-                      {/* Utiliser la méthode getIncludedFeatures() du model */}
-                      {plan.getIncludedFeatures().slice(0, 5).map((feature, idx) => (
-                        <li key={idx} className="flex items-start">
-                          <CheckCircle className="w-5 h-5 text-green-600 mr-3 flex-shrink-0 mt-0.5" />
-                          <span className="text-slate-700">{feature.name}</span>
-                        </li>
-                      ))}
-                      {/* Afficher le nombre total de fonctionnalités */}
-                      {plan.countIncludedFeatures() > 5 && (
-                        <li className="text-sm text-slate-500 italic">
-                          + {plan.countIncludedFeatures() - 5} autres fonctionnalités
-                        </li>
-                      )}
-                    </ul>
-                    <Button 
-                      onClick={() => onNavigate('subscription-plans')}
-                      className={`w-full ${
-                        plan.popular 
-                          ? 'bg-blue-600 hover:bg-blue-700' 
-                          : 'bg-slate-600 hover:bg-slate-700'
-                      }`}
-                    >
-                      Choisir ce plan
-                      <ArrowRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          <div className="text-center">
-            <Button 
-              onClick={() => onNavigate('subscription-plans')}
-              variant="outline"
-              className="border-blue-600 text-blue-600 hover:bg-blue-50"
-            >
-              Voir tous les plans (Médecins, Cliniques, Patients)
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
           </div>
         </div>
       </section>
@@ -402,6 +296,121 @@ export function HomePage({ onNavigate, isAuthenticated, userType, onLogout }: Ho
         </div>
       </section>
 
+      {/* Partners Section */}
+      <section className="py-16 bg-slate-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h3 className="text-2xl text-slate-800 mb-4">Nos partenaires</h3>
+            <p className="text-slate-600">Ils nous font confiance</p>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {partners.map((partner, index) => (
+              <div key={index} className="bg-white p-6 rounded-lg shadow-sm text-center">
+                <p className="text-slate-700">{partner}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section - Plans Médecins */}
+      <section className="py-20 bg-gradient-to-b from-white to-slate-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <Badge className="bg-blue-100 text-blue-700 mb-4">
+              <Stethoscope className="w-4 h-4 mr-1" />
+              Plans Médecins
+            </Badge>
+            <h2 className="text-3xl lg:text-4xl text-slate-800 mb-4">
+              Des tarifs adaptés à votre pratique
+            </h2>
+            <p className="text-xl text-slate-600 max-w-3xl mx-auto">
+              Choisissez le plan qui correspond à vos besoins et commencez votre essai gratuit de 14 jours
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 mb-12">
+            {activeDoctorPlans.map((plan) => (
+              <Card 
+                key={plan.id} 
+                className={`relative ${plan.popular ? 'border-2 border-blue-500 shadow-xl' : 'border border-gray-200'}`}
+              >
+                {plan.popular && (
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                    <Badge className="bg-blue-600 text-white px-4 py-1">
+                      <Star className="w-3 h-3 mr-1" />
+                      Plus Populaire
+                    </Badge>
+                  </div>
+                )}
+                <CardHeader className="text-center pb-8 pt-8">
+                  <div className="mb-4">
+                    {plan.color === 'green' && <Star className="w-12 h-12 text-green-600 mx-auto" />}
+                    {plan.color === 'blue' && <Users className="w-12 h-12 text-blue-600 mx-auto" />}
+                    {plan.color === 'purple' && <Crown className="w-12 h-12 text-purple-600 mx-auto" />}
+                  </div>
+                  <CardTitle className="text-2xl mb-2">{plan.name}</CardTitle>
+                  <p className="text-slate-600 text-sm">{plan.description}</p>
+                  <div className="mt-6">
+                    <div className="flex items-baseline justify-center">
+                      <span className="text-4xl font-bold text-slate-900">{plan.monthlyPrice}€</span>
+                      <span className="text-slate-600 ml-2">/mois</span>
+                    </div>
+                    <p className="text-sm text-slate-500 mt-2">
+                      ou {plan.yearlyPrice}€/an (économisez {plan.monthlyPrice * 12 - plan.yearlyPrice}€)
+                    </p>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-3 mb-8">
+                    {plan.features.slice(0, 5).map((feature, idx) => (
+                      <li key={idx} className="flex items-start">
+                        {feature.included ? (
+                          <CheckCircle className="w-5 h-5 text-green-600 mr-3 flex-shrink-0 mt-0.5" />
+                        ) : (
+                          <div className="w-5 h-5 mr-3 flex-shrink-0" />
+                        )}
+                        <span className={feature.included ? 'text-slate-700' : 'text-slate-400 line-through'}>
+                          {feature.name}
+                        </span>
+                      </li>
+                    ))}
+                    {plan.features.length > 5 && (
+                      <li className="text-sm text-slate-500 italic">
+                        + {plan.features.length - 5} autres fonctionnalités
+                      </li>
+                    )}
+                  </ul>
+                  <Button 
+                    onClick={() => onNavigate('subscription-plans')}
+                    className={`w-full ${
+                      plan.popular 
+                        ? 'bg-blue-600 hover:bg-blue-700' 
+                        : 'bg-slate-600 hover:bg-slate-700'
+                    }`}
+                  >
+                    Choisir ce plan
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="text-center">
+            <Button 
+              onClick={() => onNavigate('subscription-plans')}
+              variant="outline"
+              className="border-blue-600 text-blue-600 hover:bg-blue-50"
+            >
+              Voir tous les plans (Médecins, Cliniques, Patients)
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-20 bg-blue-600">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -424,6 +433,127 @@ export function HomePage({ onNavigate, isAuthenticated, userType, onLogout }: Ho
               className="border-white text-white hover:bg-blue-700 px-8 py-3 text-lg"
             >
               Nous contacter
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* How to Get Started Section */}
+      <section className="py-16 bg-slate-100">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl lg:text-4xl text-slate-800 mb-4">
+              Comment Commencer ?
+            </h2>
+            <p className="text-xl text-slate-600">
+              Processus simple et sécurisé pour tous les types d'utilisateurs
+            </p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* Pour les Médecins */}
+            <Card className="p-8 border-l-4 border-l-blue-600">
+              <div className="flex items-center mb-6">
+                <div className="bg-blue-100 p-3 rounded-full mr-4">
+                  <Stethoscope className="h-8 w-8 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-slate-800">Médecins</h3>
+                  <p className="text-slate-600">Abonnement requis pour créer un compte</p>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex items-start space-x-3">
+                  <div className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mt-0.5">1</div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800">Choisissez votre plan</h4>
+                    <p className="text-slate-600 text-sm">À partir de 29€/mois avec 14 jours d'essai gratuit</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <div className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mt-0.5">2</div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800">Effectuez le paiement</h4>
+                    <p className="text-slate-600 text-sm">Paiement sécurisé par carte ou prélèvement</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <div className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mt-0.5">3</div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800">Compte activé immédiatement</h4>
+                    <p className="text-slate-600 text-sm">Accès complet à votre dashboard médecin</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-6 pt-6 border-t">
+                <Button 
+                  onClick={() => onNavigate('subscription-plans')}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  Voir les Plans Médecin
+                </Button>
+              </div>
+            </Card>
+            
+            {/* Pour les Patients */}
+            <Card className="p-8 border-l-4 border-l-green-600">
+              <div className="flex items-center mb-6">
+                <div className="bg-green-100 p-3 rounded-full mr-4">
+                  <Heart className="h-8 w-8 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-slate-800">Patients</h3>
+                  <p className="text-slate-600">Inscription gratuite et immédiate</p>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex items-start space-x-3">
+                  <div className="bg-green-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mt-0.5">1</div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800">Création gratuite</h4>
+                    <p className="text-slate-600 text-sm">Aucun paiement requis pour commencer</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <div className="bg-green-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mt-0.5">2</div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800">Accès immédiat</h4>
+                    <p className="text-slate-600 text-sm">Toutes les fonctions de base incluses</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <div className="bg-green-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mt-0.5">3</div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800">Upgrade optionnel</h4>
+                    <p className="text-slate-600 text-sm">Plan Premium à 9€/mois disponible</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-6 pt-6 border-t">
+                <Button 
+                  onClick={() => onNavigate('signup')}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
+                >
+                  Créer un Compte Gratuit
+                </Button>
+              </div>
+            </Card>
+          </div>
+          
+          <div className="text-center mt-12">
+            <p className="text-slate-600 mb-4">
+              Vous gérez une clinique ou un hôpital ?
+            </p>
+            <Button 
+              variant="outline"
+              onClick={() => onNavigate('subscription-plans')}
+              className="border-purple-600 text-purple-600 hover:bg-purple-50"
+            >
+              Découvrir nos Solutions Entreprise
             </Button>
           </div>
         </div>
@@ -461,7 +591,15 @@ export function HomePage({ onNavigate, isAuthenticated, userType, onLogout }: Ho
                     onClick={() => onNavigate('login')}
                     className="text-gray-400 hover:text-white transition-colors"
                   >
-                    Connexion
+                    Médecins
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => onNavigate('login')}
+                    className="text-gray-400 hover:text-white transition-colors"
+                  >
+                    Patients
                   </button>
                 </li>
                 <li>
@@ -496,8 +634,10 @@ export function HomePage({ onNavigate, isAuthenticated, userType, onLogout }: Ho
             </div>
           </div>
           
-          <div className="mt-12 pt-8 border-t border-gray-700 text-center text-gray-400">
-            <p>© 2025 MedPlatform. Tous droits réservés.</p>
+          <div className="border-t border-gray-700 mt-8 pt-8 text-center">
+            <p className="text-gray-400">
+              © 2024 MedPlatform. Tous droits réservés.
+            </p>
           </div>
         </div>
       </footer>

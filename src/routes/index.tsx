@@ -3,7 +3,6 @@
  * Point central de toutes les routes de l'application
  */
 
-import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ROUTES, DEFAULT_ROUTE_BY_ROLE } from '../config/routes.config';
 import { ProtectedRoute } from './ProtectedRoute';
@@ -12,40 +11,40 @@ import { ProtectedRoute } from './ProtectedRoute';
 import { HomePage } from '../views/public/HomePage';
 
 // Anciens composants
-import { Login } from '../components/Login';
-import { Signup } from '../components/Signup';
-import { Contact } from '../components/Contact';
-import { SubscriptionPlans } from '../components/SubscriptionPlans';
-import { Payment } from '../components/Payment';
+import { Login } from '../components/Menu/Login';
+import { Signup } from '../components/Menu/Signup';
+import { Contact } from '../components/Menu/Contact';
+import { SubscriptionPlans } from '../components/Menu/SubscriptionPlans';
+import { Payment } from '../components/Menu/Payment';
 
 // Routes Doctor
-import { DoctorDashboard } from '../components/DoctorDashboard';
-import { DoctorProfile } from '../components/DoctorProfile';
-import { PatientManagement } from '../components/PatientManagement';
-import { AppointmentManagement } from '../components/AppointmentManagement';
-import { DoctorHistory } from '../components/DoctorHistory';
-import { PrescriptionView } from '../components/PrescriptionView';
+import { DoctorDashboard } from '../components/doctor/DoctorDashboard';
+import { DoctorProfile } from '../components/doctor/DoctorProfile';
+import { PatientManagement } from '../components/doctor/PatientManagement';
+import { AppointmentManagement } from '../components/doctor/AppointmentManagement';
+import { DoctorHistory } from '../components/doctor/DoctorHistory';
+import { PrescriptionView } from '../components/doctor/PrescriptionView';
 
 
 // Routes Patient
-import { PatientDashboard } from '../components/PatientDashboard';
-import { RequestAppointment } from '../components/RequestAppointment';
-import { PatientHistory } from '../components/PatientHistory';
+import { PatientDashboard } from '../components/patient/PatientDashboard';
+import { RequestAppointment } from '../components/patient/RequestAppointment';
+import { PatientHistory } from '../components/patient/PatientHistory';
 
 // Routes Secretary
-import { SecretaryDashboard } from '../components/SecretaryDashboard';
-import { SecretaryAppointments } from '../components/SecretaryAppointments';
-import { SecretaryPatientManagement } from '../components/SecretaryPatientManagement';
-import { AddPatientForm } from '../components/AddPatientForm';
+import { SecretaryDashboard } from '../components/secretary/SecretaryDashboard';
+import { SecretaryAppointments } from '../components/secretary/SecretaryAppointments';
+import { SecretaryPatientManagement } from '../components/secretary/SecretaryPatientManagement';
+import { AddPatientForm } from '../components/secretary/AddPatientForm';
 // Routes Admin
-import { AdminDashboard } from '../components/AdminDashboard';
-import { UserManagement } from '../components/UserManagement';
-import { SubscriptionManagement } from '../components/SubscriptionManagement';
-import { SecretaryManagement } from '../components/SecretaryManagement';
-import { SystemSettings } from '../components/SystemSettings';
-import { SecurityCenter } from '../components/SecurityCenter';
-import { SystemReports } from '../components/SystemReports';
-import { ActivityLogs } from '../components/ActivityLogs';
+import { AdminDashboard } from '../components/admin/AdminDashboard';
+import { UserManagement } from '../components/admin/UserManagement';
+import { SubscriptionManagement } from '../components/admin/SubscriptionManagement';
+import { SecretaryManagement } from '../components/admin/SecretaryManagement';
+import { SystemSettings } from '../components/admin/SystemSettings';
+import { SecurityCenter } from '../components/admin/SecurityCenter';
+import { SystemReports } from '../components/admin/SystemReports';
+import { ActivityLogs } from '../components/admin/ActivityLogs';
 import type { UserType } from '../types/UserType';
 
 interface AppRoutesProps {
@@ -64,7 +63,6 @@ export function AppRoutes({
   onNavigate = () => { },
   onLogout = () => { },
   onLogin = () => { },
-  onSignup = () => { },
   onSelectPlan = () => { }
 }: AppRoutesProps) {
 
@@ -112,9 +110,18 @@ export function AppRoutes({
         element={<SubscriptionPlans {...getCommonProps()} onSelectPlan={onSelectPlan} />}
       />
 
-      <Route path={ROUTES.PUBLIC.PAYMENT} element={<Payment {...getCommonProps()} />} />
-
-      {/* ========== ROUTES MÉDECIN (Protégées) ========== */}
+     // Dans AppRoutes.tsx - Section des routes publiques
+      <Route
+        path={ROUTES.PUBLIC.PAYMENT}
+        element={
+          <Payment
+            onNavigate={onNavigate}
+            isAuthenticated={isAuthenticated}
+            userType={userType}
+            onLogout={onLogout}
+          />
+        }
+      />    {/* ========== ROUTES MÉDECIN (Protégées) ========== */}
       <Route
         element={
           <ProtectedRoute
@@ -156,7 +163,7 @@ export function AppRoutes({
       <Route path={ROUTES.SECRETARY.DASHBOARD} element={<SecretaryDashboard onNavigate={onNavigate} onLogout={onLogout} />} />
       <Route path={ROUTES.SECRETARY.PATIENTS_Mangement} element={<SecretaryPatientManagement onNavigate={onNavigate} onLogout={onLogout} />} />
       <Route path={ROUTES.SECRETARY.APPOINTMENTS} element={<SecretaryAppointments onNavigate={onNavigate} onLogout={onLogout} />} />
-      <Route path={ROUTES.SECRETARY.ADD_PATIENT} element={<AddPatientForm onNavigate={onNavigate} onLogout={onLogout}  userType="secretary" />} />
+      <Route path={ROUTES.SECRETARY.ADD_PATIENT} element={<AddPatientForm onNavigate={onNavigate} onLogout={onLogout} userType="secretary" />} />
 
 
       {/* ========== ROUTES ADMIN (Protégées) ========== */}
