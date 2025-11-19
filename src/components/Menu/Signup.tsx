@@ -44,27 +44,37 @@ export function Signup({ onNavigate, onLogin }: SignupProps) {
     'Radiologie',
     'Urgences'
   ];
-
 const handleSignup = async (userType: UserType) => {
-  if (!formData.email || !formData.password || formData.password !== formData.confirmPassword) {
-    alert("Veuillez vérifier vos informations");
+  // Validation
+  if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
+    alert("Veuillez remplir tous les champs obligatoires");
+    return;
+  }
+
+  if (formData.password !== formData.confirmPassword) {
+    alert("Les mots de passe ne correspondent pas");
     return;
   }
 
   if (!formData.acceptTerms) {
-    alert("Vous devez accepter les conditions.");
+    alert("Vous devez accepter les conditions d'utilisation");
     return;
   }
 
-  const signupData = {
-    firstName: formData.firstName,
-    lastName: formData.lastName,
-    email: formData.email,
+  // Préparation des données
+  const signupData: any = {
+    firstName: formData.firstName.trim(),
+    lastName: formData.lastName.trim(),
+    email: formData.email.trim(),
     password: formData.password,
-    phone: formData.phone,
-    specialty: formData.specialty,
-    role: userType === "doctor" ? "doctor" : "patient"
+    phone: formData.phone?.trim() || null,
+    role: userType
   };
+
+  // Ajouter la spécialité uniquement pour les médecins
+  if (userType === "doctor") {
+    signupData.specialty = formData.specialty || null;
+  }
 
   try {
     const result = await register(signupData);
@@ -74,11 +84,22 @@ const handleSignup = async (userType: UserType) => {
       return;
     }
 
-    alert("Compte créé avec succès !");
-    onNavigate("login");
+    if (result.user) {
+      alert("Compte créé avec succès !");
+      onNavigate("login");
+    } else {
+      alert("Erreur lors de la création du compte");
+    }
 
-  } catch (error) {
-    alert("Erreur lors de l'inscription");
+  } catch (error: any) {
+    console.error("Erreur d'inscription:", error);
+    
+    // Gestion d'erreur améliorée
+    const errorMessage = error?.response?.data?.message 
+      || error?.response?.data?.errors?.join(', ') 
+      || "Erreur lors de l'inscription";
+    
+    alert(errorMessage);
   }
 };
 
