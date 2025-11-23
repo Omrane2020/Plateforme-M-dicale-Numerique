@@ -24,18 +24,16 @@ export function Login({ onNavigate, onLogin }: LoginProps) {
 const handleLogin = async (userType: UserType) => {
   try {
     const response = await login(formData.email, formData.password);
-
-    // Save token
     localStorage.setItem("token", response.token);
     localStorage.setItem("user", JSON.stringify(response.user));
 
-    alert("Connexion réussie !");
     onLogin(userType);
-  } catch (error: any) {
-    alert(error.message || "Erreur de connexion");
-  }
-};
 
+  } catch (err: any) {
+    alert(err.message);
+  }
+
+};
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({

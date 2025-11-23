@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import type {Page } from "../index";
 import { DoctorSidebar } from './DoctorSidebar';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import { Calendar } from './ui/calendar';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import { Calendar } from '../components/ui/calendar';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 import { 
   Calendar as CalendarIcon, 
   Clock, 
@@ -25,14 +25,14 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "./ui/dialog";
+} from "../components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "./ui/select";
+} from "../components/ui/select";
 
 interface AppointmentManagementProps {
   onNavigate: (page: Page) => void; // Utilisation du type Page

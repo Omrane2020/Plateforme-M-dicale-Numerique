@@ -62,7 +62,7 @@ export function DoctorSidebar({ onNavigate, onLogout, currentPage }: DoctorSideb
       label: 'Historique',
       page: 'doctor-history' as Page,
       active: currentPage === 'doctor-history'
-    }
+    },
   ];
 
   return (

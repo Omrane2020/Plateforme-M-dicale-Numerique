@@ -2,13 +2,25 @@ import API from "./api";
 
 // Auth
 export const login = async (email, password) => {
-  const res = await API.post("/auth/login", { email, password });
-  
-  // Log activity après connexion réussie
-  await logActivity(res.data.user.id, 'login', 'Connexion au système', 'success');
+  try {
+    const res = await API.post("/auth/login", { email, password });
 
-  return res.data;
+    // Log activity only if login succeeds
+    await logActivity(res.data.user.id, 'login', 'Connexion au système', 'success');
+
+    return res.data;
+
+  } catch (error) {
+    // If backend returned JSON error → throw it cleanly
+    if (error.response && error.response.data) {
+      throw new Error(error.response.data.message || "Login failed");
+    }
+
+    // Otherwise generic error
+    throw new Error("Une erreur est survenue lors de la connexion");
+  }
 };
+
 
 export const register = async (data) => {
   const res = await API.post("/auth/signup", data);

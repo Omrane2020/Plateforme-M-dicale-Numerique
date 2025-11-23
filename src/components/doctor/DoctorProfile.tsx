@@ -1,4 +1,4 @@
-import  { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DoctorSidebar } from './DoctorSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 
 import type { Page } from '../../types/Page';
+
 interface DoctorProfileProps {
   onNavigate: (page: Page) => void;
   onLogout: () => void;
@@ -30,16 +31,24 @@ interface DoctorProfileProps {
 export function DoctorProfile({ onNavigate, onLogout }: DoctorProfileProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [profileData, setProfileData] = useState({
-    firstName: 'Pierre',
-    lastName: 'Martin',
-    email: 'dr.martin@medplatform.com',
-    phone: '+33 1 23 45 67 89',
-    specialty: 'Cardiologie',
-    address: '15 rue de la Santé, 75014 Paris',
-    licenseNumber: '75001234567',
-    experience: '12',
-    about: 'Cardiologue expérimenté avec plus de 12 ans de pratique. Spécialisé dans les maladies cardiovasculaires et la prévention. Diplômé de la faculté de médecine Paris Descartes.'
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    specialty: '',
+    address: '',
+    licenseNumber: '',
+    experience: '',
+    about: '',
+    certificates: [] as { name: string; institution: string; year: string }[]
   });
+
+  const certificates = [
+    { name: 'Diplôme de Docteur en Médecine', institution: 'Université Paris Descartes', year: '2012' },
+    { name: 'Spécialisation en Cardiologie', institution: 'Hôpital Saint-Louis', year: '2015' },
+    { name: 'Formation en Échographie Cardiaque', institution: 'ESC', year: '2018' },
+    { name: 'Certification en Réanimation Cardiopulmonaire', institution: 'AHA', year: '2023' }
+  ];
 
   const specialties = [
     'Médecine générale',
@@ -57,12 +66,31 @@ export function DoctorProfile({ onNavigate, onLogout }: DoctorProfileProps) {
     'Urgences'
   ];
 
-  const certificates = [
-    { name: 'Diplôme de Docteur en Médecine', institution: 'Université Paris Descartes', year: '2012' },
-    { name: 'Spécialisation en Cardiologie', institution: 'Hôpital Saint-Louis', year: '2015' },
-    { name: 'Formation en Échographie Cardiaque', institution: 'ESC', year: '2018' },
-    { name: 'Certification en Réanimation Cardiopulmonaire', institution: 'AHA', year: '2023' }
-  ];
+  const generalDoctorPresentation = 
+  "Médecin expérimenté et passionné, dédié à fournir les meilleurs soins à ses patients. " +
+  "Spécialisé dans son domaine, avec plusieurs années d'expérience et une approche professionnelle " +
+  "alliant expertise et attention personnalisée. Toujours à jour avec les dernières avancées médicales " +
+  "et engagé dans la prévention et le bien-être de ses patients.";
+
+  useEffect(() => {
+    // Load dynamic data from localStorage
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      const user = JSON.parse(storedUser);
+      setProfileData({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        specialty: user.specialty || '',
+        address: user.address || '',
+        licenseNumber: user.licenseNumber || '',
+        experience: user.experience || '',
+        about: user.about || '',
+        certificates: user.certificates || []
+      });
+    }
+  }, []);
 
   const handleChange = (field: string, value: string) => {
     setProfileData(prev => ({
@@ -73,7 +101,8 @@ export function DoctorProfile({ onNavigate, onLogout }: DoctorProfileProps) {
 
   const handleSave = () => {
     setIsEditing(false);
-    // Ici on sauvegarderait les données
+    // Here you can send updated data to backend or update localStorage
+    localStorage.setItem('user', JSON.stringify(profileData));
   };
 
   return (
@@ -118,8 +147,8 @@ export function DoctorProfile({ onNavigate, onLogout }: DoctorProfileProps) {
               <CardContent className="p-6 text-center">
                 <div className="relative inline-block">
                   <ImageWithFallback
-                    src="https://images.unsplash.com/photo-1589104759909-e355f8999f7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtZWRpY2FsJTIwdGVhbSUyMGhlYWx0aGNhcmUlMjBwcm9mZXNzaW9uYWxzfGVufDF8fHx8MTc1ODE3OTg2N3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
-                    alt="Dr. Martin"
+                    src="https://images.unsplash.com/photo-1589104759909-e355f8999f7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg"
+                    alt={`Dr. ${profileData.firstName}`}
                     className="w-32 h-32 rounded-full object-cover mx-auto mb-4"
                   />
                   {isEditing && (
@@ -135,33 +164,6 @@ export function DoctorProfile({ onNavigate, onLogout }: DoctorProfileProps) {
                 <Badge variant="secondary" className="bg-green-100 text-green-800">
                   Compte vérifié
                 </Badge>
-              </CardContent>
-            </Card>
-
-            {/* Quick Stats */}
-            <Card className="shadow-sm border-0">
-              <CardHeader>
-                <CardTitle className="text-lg text-slate-800">Statistiques</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-600">Patients suivis</span>
-                    <span className="text-slate-800">127</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-600">Années d'expérience</span>
-                    <span className="text-slate-800">{profileData.experience}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-600">Note moyenne</span>
-                    <span className="text-slate-800">4.8/5</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-600">Consultations ce mois</span>
-                    <span className="text-slate-800">84</span>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </div>
@@ -237,22 +239,7 @@ export function DoctorProfile({ onNavigate, onLogout }: DoctorProfileProps) {
                       </p>
                     )}
                   </div>
-                  <div className="md:col-span-2">
-                    <Label htmlFor="address">Adresse</Label>
-                    {isEditing ? (
-                      <Input
-                        id="address"
-                        value={profileData.address}
-                        onChange={(e) => handleChange('address', e.target.value)}
-                        className="mt-1"
-                      />
-                    ) : (
-                      <p className="mt-1 p-2 bg-slate-50 rounded-md flex items-center">
-                        <MapPin className="h-4 w-4 mr-2 text-slate-600" />
-                        {profileData.address}
-                      </p>
-                    )}
-                  </div>
+                  
                 </div>
               </CardContent>
             </Card>
@@ -307,31 +294,18 @@ export function DoctorProfile({ onNavigate, onLogout }: DoctorProfileProps) {
                     )}
                   </div>
                   <div className="md:col-span-2">
-                    <Label htmlFor="licenseNumber">Numéro d'ordre</Label>
-                    {isEditing ? (
-                      <Input
-                        id="licenseNumber"
-                        value={profileData.licenseNumber}
-                        onChange={(e) => handleChange('licenseNumber', e.target.value)}
-                        className="mt-1"
-                      />
-                    ) : (
-                      <p className="mt-1 p-2 bg-slate-50 rounded-md">{profileData.licenseNumber}</p>
-                    )}
-                  </div>
-                  <div className="md:col-span-2">
                     <Label htmlFor="about">Présentation</Label>
                     {isEditing ? (
                       <Textarea
                         id="about"
-                        value={profileData.about}
+                        value={generalDoctorPresentation}
                         onChange={(e) => handleChange('about', e.target.value)}
                         rows={4}
                         className="mt-1"
                       />
                     ) : (
                       <p className="mt-1 p-3 bg-slate-50 rounded-md leading-relaxed">
-                        {profileData.about}
+                        {generalDoctorPresentation}
                       </p>
                     )}
                   </div>
