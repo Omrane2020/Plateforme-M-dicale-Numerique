@@ -1,291 +1,174 @@
-/**
- * Service API pour la gestion des abonnements
- * 
- * Ce fichier fait le pont entre le frontend (composants React) et le backend (base de données)
- * 
- * ARCHITECTURE:
- * Frontend (Components) -> API Service -> Database Layer -> MySQL
- * 
- * Pour une vraie application:
- * - Ce service appellerait des endpoints REST/GraphQL
- * - Exemple: fetch('/api/subscriptions') ou axios.get('/api/subscriptions')
- * - Le backend Node.js/Express recevrait ces requêtes et appellerait subscriptionDb.ts
- */
+import API from '../api';
 
-import {
-  getAllPlans,
-  getPlansByCategory,
-  getActivePlans,
-  getPlanById,
-  createPlan,
-  updatePlan,
-  deletePlan,
-  togglePlanStatus
-} from '../database/subscriptionDb';
+export interface SubscriptionFeature {
+  name: string;
+  included: boolean;
+}
 
-import type {
-  SubscriptionPlan,
-  CreateSubscriptionPlanDTO,
-  UpdateSubscriptionPlanDTO
-} from '../../types/subscription';
+export interface SubscriptionPlan {
+  id: number;
+  name: string;
+  description: string;
+  category: 'doctor' | 'clinic' | 'patient';
+  monthlyPrice: number;
+  yearlyPrice: number;
+  popular: boolean;
+  color: 'blue' | 'green' | 'purple' | 'orange';
+  features: SubscriptionFeature[];
+  active: boolean;
+  order: number;
+  createdAt?: string;
+  updatedAt?: string;
+  // Champs calculés par le backend
+  yearlySavings: number;
+  includedFeaturesCount: number;
+  canToggle?: boolean;
+}
 
-// =====================================================
-// API PUBLIQUE (utilisée par le frontend)
-// =====================================================
+export interface CreateSubscriptionPlanDTO {
+  name: string;
+  description: string;
+  category: 'doctor' | 'clinic' | 'patient';
+  monthlyPrice: number;
+  yearlyPrice: number;
+  popular: boolean;
+  color: 'blue' | 'green' | 'purple' | 'orange';
+  features: SubscriptionFeature[];
+  order: number;
+}
 
-export class SubscriptionApiService {
-  /**
-   * Récupère tous les plans d'abonnement
-   * 
-   * Production:
-   * return fetch('/api/subscriptions').then(res => res.json())
-   */
-  static async getAllPlans(): Promise<SubscriptionPlan[]> {
-    try {
-      console.log('[API] GET /api/subscriptions');
-      
-      const response = await getAllPlans();
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Erreur lors de la récupération des plans');
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('[API Error]', error);
-      throw error;
+export interface UpdateSubscriptionPlanDTO extends Partial<CreateSubscriptionPlanDTO> { }
+
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  errors?: string[];
+  stats?: any;
+}
+
+class SubscriptionApiService {
+  private baseUrl = '/subscriptions';
+async getAllPlans(): Promise<{ plans: SubscriptionPlan[], stats: any }> {
+  try {
+    const response = await API.get<any>(this.baseUrl);
+    
+    console.log('🔍 Type de response.data:', typeof response.data);
+    console.log('🔍 Est un tableau?:', Array.isArray(response.data));
+    
+    // L'API retourne directement le tableau de plans
+    if (Array.isArray(response.data)) {
+      return {
+        plans: response.data,
+        stats: {}
+      };
     }
-  }
-
-  /**
-   * Récupère les plans par catégorie
-   * 
-   * Production:
-   * return fetch(`/api/subscriptions?category=${category}`).then(res => res.json())
-   */
-  static async getPlansByCategory(category: 'doctor' | 'clinic' | 'patient'): Promise<SubscriptionPlan[]> {
-    try {
-      console.log(`[API] GET /api/subscriptions?category=${category}`);
-      
-      const response = await getPlansByCategory(category);
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Erreur lors de la récupération des plans');
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('[API Error]', error);
-      throw error;
+    
+    // Si par hasard c'est encapsulé dans data
+    if (response.data && Array.isArray(response.data.data)) {
+      return {
+        plans: response.data.data,
+        stats: response.data.stats || {}
+      };
     }
-  }
-
-  /**
-   * Récupère uniquement les plans actifs
-   * 
-   * Production:
-   * return fetch('/api/subscriptions?active=true').then(res => res.json())
-   */
-  static async getActivePlans(): Promise<SubscriptionPlan[]> {
-    try {
-      console.log('[API] GET /api/subscriptions?active=true');
-      
-      const response = await getActivePlans();
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Erreur lors de la récupération des plans actifs');
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('[API Error]', error);
-      throw error;
+    
+    // Si c'est un objet avec success
+    if (response.data && response.data.success === false) {
+      throw new Error(response.data.message || 'Erreur API');
     }
-  }
-
-  /**
-   * Récupère un plan spécifique par son ID
-   * 
-   * Production:
-   * return fetch(`/api/subscriptions/${id}`).then(res => res.json())
-   */
-  static async getPlanById(id: string): Promise<SubscriptionPlan> {
-    try {
-      console.log(`[API] GET /api/subscriptions/${id}`);
-      
-      const response = await getPlanById(id);
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Plan non trouvé');
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('[API Error]', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Crée un nouveau plan d'abonnement (ADMIN ONLY)
-   * 
-   * Production:
-   * return fetch('/api/subscriptions', {
-   *   method: 'POST',
-   *   headers: { 'Content-Type': 'application/json' },
-   *   body: JSON.stringify(planData)
-   * }).then(res => res.json())
-   */
-  static async createPlan(planData: CreateSubscriptionPlanDTO): Promise<SubscriptionPlan> {
-    try {
-      console.log('[API] POST /api/subscriptions', planData);
-      
-      const response = await createPlan(planData);
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Erreur lors de la création du plan');
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('[API Error]', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Met à jour un plan existant (ADMIN ONLY)
-   * 
-   * Production:
-   * return fetch(`/api/subscriptions/${id}`, {
-   *   method: 'PUT',
-   *   headers: { 'Content-Type': 'application/json' },
-   *   body: JSON.stringify(updates)
-   * }).then(res => res.json())
-   */
-  static async updatePlan(id: string, updates: UpdateSubscriptionPlanDTO): Promise<SubscriptionPlan> {
-    try {
-      console.log(`[API] PUT /api/subscriptions/${id}`, updates);
-      
-      const response = await updatePlan(id, updates);
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Erreur lors de la mise à jour du plan');
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('[API Error]', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Supprime un plan (ADMIN ONLY)
-   * 
-   * Production:
-   * return fetch(`/api/subscriptions/${id}`, {
-   *   method: 'DELETE'
-   * }).then(res => res.json())
-   */
-  static async deletePlan(id: string): Promise<void> {
-    try {
-      console.log(`[API] DELETE /api/subscriptions/${id}`);
-      
-      const response = await deletePlan(id);
-      
-      if (!response.success) {
-        throw new Error(response.error || 'Erreur lors de la suppression du plan');
-      }
-    } catch (error) {
-      console.error('[API Error]', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Active/désactive un plan (ADMIN ONLY)
-   * 
-   * Production:
-   * return fetch(`/api/subscriptions/${id}/toggle`, {
-   *   method: 'PATCH'
-   * }).then(res => res.json())
-   */
-  static async togglePlanStatus(id: string): Promise<SubscriptionPlan> {
-    try {
-      console.log(`[API] PATCH /api/subscriptions/${id}/toggle`);
-      
-      const response = await togglePlanStatus(id);
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Erreur lors du changement de statut');
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('[API Error]', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Récupère les plans actifs d'une catégorie spécifique
-   * Utile pour afficher les plans sur la page d'accueil
-   * 
-   * Production:
-   * return fetch(`/api/subscriptions?category=${category}&active=true`).then(res => res.json())
-   */
-  static async getActivePlansByCategory(category: 'doctor' | 'clinic' | 'patient'): Promise<SubscriptionPlan[]> {
-    try {
-      console.log(`[API] GET /api/subscriptions?category=${category}&active=true`);
-      
-      const allPlans = await this.getPlansByCategory(category);
-      return allPlans.filter(plan => plan.active);
-    } catch (error) {
-      console.error('[API Error]', error);
-      throw error;
-    }
+    
+    // Fallback
+    console.warn('⚠️ Structure inattendue, retour tableau vide');
+    return {
+      plans: [],
+      stats: {}
+    };
+    
+  } catch (error: any) {
+    console.error('❌ Erreur API:', error);
+    throw new Error('Erreur lors de la récupération des plans');
   }
 }
 
-// Export par défaut pour faciliter l'importation
-export default SubscriptionApiService;
+  async getPlansByCategory(category: string): Promise<SubscriptionPlan[]> {
+    try {
+      const response = await this.getAllPlans();
+      return response.plans.filter(plan => plan.category === category);
+    } catch (error) {
+      console.error(`Erreur lors de la récupération des plans ${category}:`, error);
+      throw new Error(`Impossible de récupérer les plans ${category}`);
+    }
+  }
 
-// =====================================================
-// EXEMPLE D'UTILISATION DANS LES COMPOSANTS
-// =====================================================
-/*
-import SubscriptionApiService from '../services/api/subscriptionApi';
+  async createPlan(planData: CreateSubscriptionPlanDTO): Promise<SubscriptionPlan> {
+    const response = await API.post<ApiResponse<SubscriptionPlan>>(this.baseUrl, planData);
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Erreur lors de la création du plan');
+    }
+    return response.data.data!;
+  }
 
-// Récupérer tous les plans
-const plans = await SubscriptionApiService.getAllPlans();
+  async updatePlan(id: string, updates: UpdateSubscriptionPlanDTO): Promise<SubscriptionPlan> {
+    const response = await API.put<ApiResponse<SubscriptionPlan>>(`${this.baseUrl}/${id}`, updates);
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Erreur lors de la mise à jour du plan');
+    }
+    return response.data.data!;
+  }
 
-// Récupérer les plans médecins actifs
-const doctorPlans = await SubscriptionApiService.getActivePlansByCategory('doctor');
+  async deletePlan(id: string): Promise<void> {
+    const response = await API.delete<ApiResponse<void>>(`${this.baseUrl}/${id}`);
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Erreur lors de la suppression du plan');
+    }
+  }
 
-// Créer un nouveau plan (admin)
-const newPlan = await SubscriptionApiService.createPlan({
-  name: 'Nouveau Plan',
-  description: 'Description',
-  category: 'doctor',
-  monthlyPrice: 49,
-  yearlyPrice: 490,
-  popular: false,
-  color: 'blue',
-  features: [
-    { name: 'Feature 1', included: true }
-  ],
-  order: 4
-});
+  async togglePlanStatus(id: string): Promise<SubscriptionPlan> {
+    const response = await API.patch<ApiResponse<SubscriptionPlan>>(`${this.baseUrl}/${id}/toggle`);
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Erreur lors du changement de statut');
+    }
+    return response.data.data!;
+  }
 
-// Mettre à jour un plan (admin)
-const updatedPlan = await SubscriptionApiService.updatePlan('plan-id', {
-  monthlyPrice: 59
-});
+  async getStatistics(): Promise<any> {
+    const response = await API.get<ApiResponse<any>>(`${this.baseUrl}/statistics`);
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Erreur lors de la récupération des statistiques');
+    }
+    return response.data.data;
+  }
 
-// Supprimer un plan (admin)
-await SubscriptionApiService.deletePlan('plan-id');
+  async searchPlans(query: string): Promise<SubscriptionPlan[]> {
+    const response = await API.get<ApiResponse<SubscriptionPlan[]>>(`${this.baseUrl}/search?q=${encodeURIComponent(query)}`);
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Erreur lors de la recherche');
+    }
+    return response.data.data || [];
+  }
 
-// Activer/désactiver un plan (admin)
-const toggledPlan = await SubscriptionApiService.togglePlanStatus('plan-id');
-*/
+  async clonePlan(id: string): Promise<SubscriptionPlan> {
+    const response = await API.post<ApiResponse<SubscriptionPlan>>(`${this.baseUrl}/${id}/clone`);
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Erreur lors du clonage du plan');
+    }
+    return response.data.data!;
+  }
+  // Supprimer static
+  async getActivePlans(): Promise<SubscriptionPlan[]> {
+    const allPlansResponse = await this.getAllPlans();
+    return allPlansResponse.plans.filter(p => p.active);
+  }
+
+  async getPlanById(id: string): Promise<SubscriptionPlan> {
+    const allPlansResponse = await this.getAllPlans();
+    const plan = allPlansResponse.plans.find(p => p.id.toString() === id);
+    if (!plan) throw new Error('Plan non trouvé');
+    return plan;
+  }
+
+
+}
+
+
+export default new SubscriptionApiService();

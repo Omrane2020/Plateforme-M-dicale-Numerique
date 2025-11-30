@@ -9,8 +9,8 @@ import type { UserType } from './types/UserType';
 function AppInner() {
   const navigate = useNavigate();
 
-  const [userType, setUserType] = useState<UserType>('doctor');
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [userType, setUserType] = useState<UserType>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
 
   const handleLogin = (email: string, password: string) => {
@@ -54,7 +54,6 @@ function AppInner() {
         break;
 
       default:
-
         switch (page) {
           // PUBLIC
           case 'home': navigate('/'); break;
@@ -65,8 +64,6 @@ function AppInner() {
           case 'payment':
             navigate(`/${page}`);
             break;
-
-
 
           // DOCTOR
           case 'doctor-dashboard': navigate('/doctor/dashboard'); break;
@@ -106,9 +103,6 @@ function AppInner() {
     }
   };
 
-
-
-
   return (
     <SubscriptionProvider>
       <div className="min-h-screen bg-gray-50">
@@ -120,6 +114,7 @@ function AppInner() {
           onLogin={handleLogin}
           onSignup={handleSignup}
           onSelectPlan={handleSelectPlan}
+          selectedPlan={selectedPlan} // ✅ Ajoutez cette ligne
         />
         <Toaster position="top-right" />
       </div>

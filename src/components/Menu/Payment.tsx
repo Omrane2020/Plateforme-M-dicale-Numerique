@@ -26,67 +26,32 @@ import {
 import { toast } from 'sonner';
 import type { UserType } from '../../types/UserType';
 import { useParams } from 'react-router-dom';
+import { useSubscriptions } from '../../contexts/SubscriptionContext';
 
 interface PaymentProps {
   onNavigate: (page: string) => void;
   isAuthenticated: boolean;
   userType: UserType;
   onLogout: () => void;
+  selectedPlan: any;
 }
 
-// Fonction pour récupérer les plans (doit correspondre à vos données réelles)
-const getPlanById = (id: string) => {
-  const allPlans = [
-    // Plans docteur
-    { 
-      id: 'doctor-basic', 
-      name: 'Médecin Solo', 
-      description: 'Pour médecins indépendants',
-      price: 29, 
-      billingCycle: 'monthly' as const,
-      savings: 0
-    },
-    { 
-      id: 'doctor-professional', 
-      name: 'Cabinet Médical', 
-      description: 'Pour les cabinets établis',
-      price: 59, 
-      billingCycle: 'monthly' as const,
-      savings: 0
-    },
-    { 
-      id: 'doctor-premium', 
-      name: 'Clinique Multi', 
-      description: 'Pour cliniques et groupes',
-      price: 99, 
-      billingCycle: 'monthly' as const,
-      savings: 0
-    },
-    // Ajoutez ici vos autres plans (patient, clinic, etc.)
-  ];
-  return allPlans.find(plan => plan.id === id);
-};
-
-export function Payment({ onNavigate, isAuthenticated, userType, onLogout }: PaymentProps) {
+export function Payment({ onNavigate, isAuthenticated, userType, onLogout, selectedPlan }: PaymentProps) {
   const { planId } = useParams<{ planId: string }>();
-  const [selectedPlan, setSelectedPlan] = useState<any>(null);
+  const { getPlanById, plans } = useSubscriptions();
+  const [localSelectedPlan, setLocalSelectedPlan] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const [formData, setFormData] = useState({
-    // Informations de contact
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
-    
-    // Informations de transfert Western Union
     transferCode: '',
     senderName: '',
     senderCountry: 'France',
     transferAmount: '',
     transferDate: '',
-    
-    // Options
     agreeTerms: false,
     confirmPayment: false
   });
@@ -94,15 +59,39 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout }: Pay
   const [isProcessing, setIsProcessing] = useState(false);
   const [transferSubmitted, setTransferSubmitted] = useState(false);
 
-  // Charger le plan basé sur l'ID de l'URL
+  // Récupération du plan
   useEffect(() => {
-    if (planId) {
-      const plan = getPlanById(planId);
-      setSelectedPlan(plan);
-      console.log('Plan chargé depuis URL:', plan);
+    console.log('🔍 Payment Debug:');
+    console.log('🔍 selectedPlan from props:', selectedPlan);
+    console.log('🔍 planId from URL:', planId);
+    console.log('🔍 Plans disponibles dans contexte:', plans);
+    
+    if (selectedPlan) {
+      setLocalSelectedPlan(selectedPlan);
+      console.log('✅ Plan chargé depuis props:', selectedPlan);
+    } else if (planId) {
+      console.log('🔄 Tentative de récupération du plan avec ID:', planId);
+      
+      const numericId = Number(planId);
+      let plan = getPlanById(numericId);
+      
+      if (plan) {
+        console.log('✅ Plan trouvé avec ID numérique:', plan);
+        setLocalSelectedPlan(plan);
+      } else {
+        plan = plans.find(p => p.id.toString() === planId);
+        
+        if (plan) {
+          console.log('✅ Plan trouvé avec ID string:', plan);
+          setLocalSelectedPlan(plan);
+        } else {
+          console.error('❌ Plan non trouvé avec ID:', planId);
+        }
+      }
     }
+    
     setIsLoading(false);
-  }, [planId]);
+  }, [selectedPlan, planId, getPlanById, plans]);
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({
@@ -116,7 +105,7 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout }: Pay
     receiverName: 'MEDICONNECT SARL',
     receiverCountry: 'France',
     receiverCity: 'Paris',
-    amount: selectedPlan ? Math.round(selectedPlan.price * 1.2) : 0
+    amount: localSelectedPlan ? Math.round((localSelectedPlan.price || localSelectedPlan.monthlyPrice || 0) * 1.2) : 0
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -152,11 +141,28 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout }: Pay
     }, 2000);
   };
 
-  const getPlanIcon = (planId: string) => {
-    if (planId?.includes('basic') || planId?.includes('solo')) return <Users className="w-5 h-5" />;
-    if (planId?.includes('professional') || planId?.includes('cabinet')) return <Star className="w-5 h-5" />;
-    if (planId?.includes('premium') || planId?.includes('multi')) return <Crown className="w-5 h-5" />;
+  const getPlanIcon = (plan: any) => {
+    if (!plan) return <Users className="w-5 h-5" />;
+    
+    const planName = plan.name?.toLowerCase() || '';
+    const planColor = plan.color || '';
+    
+    if (planName.includes('basic') || planName.includes('solo') || planColor === 'blue') {
+      return <Users className="w-5 h-5" />;
+    }
+    if (planName.includes('professional') || planName.includes('cabinet') || planColor === 'green') {
+      return <Star className="w-5 h-5" />;
+    }
+    if (planName.includes('premium') || planName.includes('multi') || planColor === 'purple') {
+      return <Crown className="w-5 h-5" />;
+    }
     return <Users className="w-5 h-5" />;
+  };
+
+  // Fonction pour obtenir le prix du plan
+  const getPlanPrice = (plan: any) => {
+    if (!plan) return 0;
+    return plan.monthlyPrice || plan.price || 0;
   };
 
   // États de chargement et d'erreur
@@ -166,20 +172,25 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout }: Pay
         <Card className="max-w-md">
           <CardContent className="p-8 text-center">
             <h2 className="text-xl font-semibold mb-4">Chargement...</h2>
-            <p className="text-gray-600">Vérification du plan sélectionné</p>
+            <p className="text-gray-600">Récupération du plan depuis la base de données</p>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  if (!selectedPlan) {
+  if (!localSelectedPlan) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Card className="max-w-md">
           <CardContent className="p-8 text-center">
             <h2 className="text-xl font-semibold mb-4">Plan introuvable</h2>
-            <p className="text-gray-600 mb-6">Le plan sélectionné n'existe pas ou n'est plus disponible.</p>
+            <p className="text-gray-600 mb-4">
+              Le plan avec l'ID <strong>{planId}</strong> n'a pas été trouvé dans la base de données.
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              Vérifiez que le plan existe et est actif.
+            </p>
             <Button onClick={() => onNavigate('subscription-plans')}>
               Retour aux plans d'abonnement
             </Button>
@@ -270,6 +281,10 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout }: Pay
       </div>
     );
   }
+
+  const currentPlan = localSelectedPlan;
+  const planPrice = getPlanPrice(currentPlan);
+  const totalAmount = Math.round(planPrice * 1.2);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -368,13 +383,13 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout }: Pay
                       <div className="flex justify-between items-center bg-green-100 rounded-lg p-4 border-2 border-green-300">
                         <div>
                           <p className="text-sm text-green-700">Montant à envoyer (TTC)</p>
-                          <p className="text-2xl font-bold text-green-900">{westernUnionDetails.amount}€</p>
+                          <p className="text-2xl font-bold text-green-900">{totalAmount}€</p>
                         </div>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => copyToClipboard(westernUnionDetails.amount.toString(), 'Montant')}
+                          onClick={() => copyToClipboard(totalAmount.toString(), 'Montant')}
                           className="border-green-300"
                         >
                           <Copy className="w-4 h-4" />
@@ -536,10 +551,10 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout }: Pay
                           type="number"
                           value={formData.transferAmount}
                           onChange={(e) => handleInputChange('transferAmount', e.target.value)}
-                          placeholder={westernUnionDetails.amount.toString()}
+                          placeholder={totalAmount.toString()}
                           required
                         />
-                        <p className="text-sm text-gray-500 mt-1">Doit correspondre à {westernUnionDetails.amount}€</p>
+                        <p className="text-sm text-gray-500 mt-1">Doit correspondre à {totalAmount}€</p>
                       </div>
                     </div>
 
@@ -609,13 +624,13 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout }: Pay
                   {/* Plan sélectionné */}
                   <div className="flex items-start space-x-3">
                     <div className="p-2 bg-blue-100 rounded-lg">
-                      {getPlanIcon(selectedPlan.id)}
+                      {getPlanIcon(currentPlan)}
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold">{selectedPlan.name}</h3>
-                      <p className="text-sm text-gray-600">{selectedPlan.description}</p>
+                      <h3 className="font-semibold">{currentPlan.name}</h3>
+                      <p className="text-sm text-gray-600">{currentPlan.description}</p>
                       <p className="text-sm text-gray-600 mt-1">
-                        Facturation {selectedPlan.billingCycle === 'monthly' ? 'mensuelle' : 'annuelle'}
+                        Facturation {currentPlan.billingCycle === 'monthly' ? 'mensuelle' : 'annuelle'}
                       </p>
                     </div>
                   </div>
@@ -625,20 +640,20 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout }: Pay
                   {/* Détails de facturation */}
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span>Plan {selectedPlan.name}</span>
-                      <span>{selectedPlan.price}€</span>
+                      <span>Plan {currentPlan.name}</span>
+                      <span>{planPrice}€</span>
                     </div>
                     
-                    {selectedPlan.billingCycle === 'yearly' && selectedPlan.savings > 0 && (
+                    {currentPlan.billingCycle === 'yearly' && currentPlan.savings > 0 && (
                       <div className="flex justify-between text-green-600">
                         <span>Économies annuelles</span>
-                        <span>-{selectedPlan.savings}€</span>
+                        <span>-{currentPlan.savings}€</span>
                       </div>
                     )}
 
                     <div className="flex justify-between">
                       <span>TVA (20%)</span>
-                      <span>{Math.round(selectedPlan.price * 0.2)}€</span>
+                      <span>{Math.round(planPrice * 0.2)}€</span>
                     </div>
                   </div>
 
@@ -646,16 +661,16 @@ export function Payment({ onNavigate, isAuthenticated, userType, onLogout }: Pay
 
                   <div className="flex justify-between font-semibold text-lg">
                     <span>Total à payer</span>
-                    <span>{Math.round(selectedPlan.price * 1.2)}€</span>
+                    <span>{totalAmount}€</span>
                   </div>
 
-                  {selectedPlan.billingCycle === 'yearly' && (
+                  {currentPlan.billingCycle === 'yearly' && (
                     <div className="text-center p-3 bg-green-50 rounded-lg">
                       <Badge className="bg-green-100 text-green-800 mb-2">
-                        Économisez {selectedPlan.savings}€ par an
+                        Économisez {currentPlan.savings}€ par an
                       </Badge>
                       <p className="text-sm text-green-700">
-                        Soit {Math.round(selectedPlan.price / 12)}€/mois
+                        Soit {Math.round(planPrice / 12)}€/mois
                       </p>
                     </div>
                   )}

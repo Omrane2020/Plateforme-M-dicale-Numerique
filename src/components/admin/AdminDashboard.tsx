@@ -12,6 +12,8 @@ import {
   Clock,
   UserCheck,
   Server,
+  Stethoscope,
+  UserCog,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -41,11 +43,13 @@ export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
     setLoading(true);
     setError(null);
     try {
-      const statsRes = await API.get('/admin/dashboard/stats', { params: { period: selectedPeriod } });
-      const recentRes = await API.get('/admin/dashboard/recent-activity', { params: { period: selectedPeriod, t: Date.now() } });
+      const statsRes = await API.get('/admin/dashboard/stats');
+      const recentRes = await API.get('/admin/dashboard/recent-activity', { 
+        params: { period: selectedPeriod } 
+      });
       const metricsRes = await API.get('/admin/dashboard/system-metrics');
 
-      setStats(statsRes.data);
+      setStats(statsRes.data.stats || statsRes.data);
       setRecentActivity(recentRes.data);
       setSystemMetrics(metricsRes.data);
     } catch (err: any) {
@@ -123,20 +127,19 @@ export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">{stats.totalUsers?.toLocaleString() ?? 0}</div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {stats.totalDoctors} médecins • {stats.totalPatients} patients
+                    </div>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">RDV Aujourd'hui</CardTitle>
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <CardTitle className="text-sm font-medium">Secrétaires</CardTitle>
+                    <UserCog className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{stats.todayAppointments ?? 0}</div>
-                    <div className="flex items-center text-xs text-blue-600 mt-1">
-                      <Clock className="w-3 h-3 mr-1" />
-                      {stats.pendingAppointments} en attente
-                    </div>
+                    <div className="text-2xl font-bold">{stats.totalSecretaries ?? 0}</div>
                   </CardContent>
                 </Card>
 
@@ -161,8 +164,41 @@ export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
                 </Card>
               </div>
 
+              {/* Detailed Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Médecins</CardTitle>
+                    <Stethoscope className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{stats.totalDoctors ?? 0}</div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Patients</CardTitle>
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{stats.totalPatients ?? 0}</div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Abonnements Actifs</CardTitle>
+                    <UserCheck className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{stats.activeSubscriptions ?? 0}</div>
+                  </CardContent>
+                </Card>
+              </div>
+
               {/* Recent Activity */}
-              <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <Card>
                   <CardHeader>
                     <CardTitle>Activité Récente</CardTitle>
@@ -170,24 +206,55 @@ export function AdminDashboard({ onNavigate, onLogout }: AdminDashboardProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {recentActivity.map((activity) => (
-                        <div key={activity.id} className="flex items-start space-x-3">
-                          <div className={`p-1 rounded-full ${getStatusColor(activity.status)}`}>
-                            {getStatusIcon(activity.type)}
+                      {recentActivity.length > 0 ? (
+                        recentActivity.map((activity) => (
+                          <div key={activity.id} className="flex items-start space-x-3">
+                            <div className={`p-1 rounded-full ${getStatusColor(activity.status)}`}>
+                              {getStatusIcon(activity.type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">
+                                {activity.User ? `${activity.User.firstName} ${activity.User.lastName}` : 'Système'}
+                              </p>
+                              <p className="text-sm text-gray-500 truncate">{activity.action}</p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                {activity.createdAt ? new Date(activity.createdAt).toLocaleString() : '-'}
+                              </p>
+                            </div>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
-                              {activity.User ? `${activity.User.firstName} ${activity.User.lastName}` : 'Système'}
-                            </p>
+                        ))
+                      ) : (
+                        <p className="text-gray-500 text-center py-4">Aucune activité récente</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
 
-                            <p className="text-sm text-gray-500 truncate">{activity.action}</p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              {activity.createdAt ? new Date(activity.createdAt).toLocaleString() : '-'}
-                            </p>                          </div>
+                {/* System Metrics */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Métriques Système</CardTitle>
+                    <CardDescription>Performance du serveur</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {systemMetrics.map((metric, index) => (
+                        <div key={index} className="flex items-center justify-between">
+                          <span className="text-sm font-medium">{metric.label}</span>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-24 bg-gray-200 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full ${
+                                  metric.value < 60 ? 'bg-green-500' : 
+                                  metric.value < 80 ? 'bg-yellow-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${metric.value}%` }}
+                              />
+                            </div>
+                            <span className="text-sm text-gray-500 w-8">{metric.value}%</span>
+                          </div>
                         </div>
                       ))}
-
-
                     </div>
                   </CardContent>
                 </Card>

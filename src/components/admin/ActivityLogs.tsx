@@ -39,30 +39,31 @@ export function ActivityLogs({ onNavigate, onLogout }: ActivityLogsProps) {
   const [selectedUser, setSelectedUser] = useState("all");
   const [selectedAction, setSelectedAction] = useState("all");
   const [selectedDate, setSelectedDate] = useState("today");
-const fetchLogs = async () => {
-  setLoading(true);
-  setError(null);
-  try {
-    const res = await API.get("/admin/activity-logs", {
-      params: {
-        user: selectedUser,
-        action: selectedAction,
-        date: selectedDate, 
-        search: searchTerm
-      }
-    });
-    setActivityLogs(res.data);
-  } catch (err: any) {
-    setError(err.response?.data?.message || err.message || "Erreur lors de la récupération des logs");
-  } finally {
-    setLoading(false);
-  }
-};
 
+  const fetchLogs = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await API.get("/admin/activity-logs", {
+        params: {
+          user: selectedUser,
+          action: selectedAction,
+          date: selectedDate,
+          search: searchTerm
+        }
+      });
+      console.log(res.data);
+      setActivityLogs(res.data.logs || []);
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || "Erreur lors de la récupération des logs");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchLogs();
-  }, []);
+  }, [selectedUser, selectedAction, selectedDate, searchTerm]);
 
   const getActionIcon = (action: string) => {
     switch (action) {
@@ -99,7 +100,8 @@ const fetchLogs = async () => {
     }
   };
 
-  const getRoleBadge = (role: string) => {
+  const getRoleBadge = (user: any) => {
+    const role = user?.role || 'system';
     switch (role) {
       case "doctor": return <Badge className="bg-blue-100 text-blue-800">Médecin</Badge>;
       case "secretary": return <Badge className="bg-green-100 text-green-800">Secrétaire</Badge>;
@@ -139,15 +141,39 @@ const fetchLogs = async () => {
     return labels[action] || action;
   };
 
-  const filteredLogs = activityLogs.filter(log => {
-    const matchesSearch = searchTerm === "" ||
-      log.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.details.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesUser = selectedUser === "all" || log.userRole === selectedUser;
-    const matchesAction = selectedAction === "all" || log.action === selectedAction;
-    return matchesSearch && matchesUser && matchesAction;
-  });
+  const getUserName = (user: any) => {
+    if (!user) return 'Système';
+    return `${user.firstName} ${user.lastName}`;
+  };
+  // Dans votre composant ActivityLogs
+  const handleExport = async () => {
+    try {
+      // Construire les paramètres de filtre pour l'export
+      const params = new URLSearchParams({
+        user: selectedUser,
+        action: selectedAction,
+        date: selectedDate,
+        search: searchTerm
+      });
 
+      const response = await API.get(`/admin/activity-logs/export?${params}`, {
+        responseType: 'blob'
+      });
+
+      const blob = new Blob([response.data], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `logs_activite_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      console.error('Erreur export:', err);
+      setError('Erreur lors de l\'export des logs');
+    }
+  };
   return (
     <div className="flex h-screen bg-gray-50">
       <AdminSidebar onNavigate={onNavigate} onLogout={onLogout} activePage="activity-logs" />
@@ -164,12 +190,11 @@ const fetchLogs = async () => {
               <Button variant="outline" onClick={fetchLogs}>
                 <RefreshCw className="w-4 h-4 mr-2" /> Actualiser
               </Button>
-              <Button onClick={() => alert("Fonction Export à implémenter")}>
-                <Download className="w-4 h-4 mr-2" /> Exporter
+              <Button onClick={handleExport}>
+                <Download className="w-4 h-4 mr-2" /> Export CSV
               </Button>
             </div>
           </div>
-
           {/* Filtres */}
           <Card className="mb-6">
             <CardHeader>
@@ -195,7 +220,6 @@ const fetchLogs = async () => {
                     <SelectItem value="secretary">Secrétaires</SelectItem>
                     <SelectItem value="admin">Administrateurs</SelectItem>
                     <SelectItem value="patient">Patients</SelectItem>
-                    <SelectItem value="system">Système</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -232,35 +256,55 @@ const fetchLogs = async () => {
             <Card>
               <CardHeader>
                 <CardTitle>Historique des Activités</CardTitle>
-                <CardDescription>{filteredLogs.length} entrée(s) trouvée(s)</CardDescription>
+                <CardDescription>{activityLogs.length} entrée(s) trouvée(s)</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {filteredLogs.map((log) => (
+                  {activityLogs.map((log) => (
                     <div key={log.id} className="border rounded-lg p-4 hover:bg-gray-50">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start space-x-4 flex-1">
-                          <div className="p-2 bg-gray-100 rounded-lg">{getActionIcon(log.action)}</div>
+                          <div className="p-2 bg-gray-100 rounded-lg">
+                            {getActionIcon(log.action)}
+                          </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center space-x-2 mb-1">
-                              <h3 className="font-semibold text-gray-900">{getActionLabel(log.action)}</h3>
-                              {getRoleBadge(log.userRole)}
+                              <h3 className="font-semibold text-gray-900">
+                                {getActionLabel(log.action)}
+                              </h3>
+                              {getRoleBadge(log.user)}
                               {getSeverityBadge(log.severity)}
                             </div>
-                            <p className="text-sm text-gray-600 mb-2">{log.details}</p>
+                            <p className="text-sm text-gray-600 mb-2">
+                              {log.details || `Action: ${log.action}`}
+                            </p>
                             <div className="flex items-center space-x-4 text-xs text-gray-500">
-                              <span className="flex items-center space-x-1"><User className="w-3 h-3" /><span>{log.user}</span></span>
-                              <span className="flex items-center space-x-1"><Clock className="w-3 h-3" /><span>{formatTimestamp(log.timestamp)}</span></span>
-                              <span>IP: {log.ipAddress}</span>
-                              <span>{log.userAgent}</span>
+                              <span className="flex items-center space-x-1">
+                                <User className="w-3 h-3" />
+                                <span>{getUserName(log.user)}</span>
+                              </span>
+                              <span className="flex items-center space-x-1">
+                                <Clock className="w-3 h-3" />
+                                <span>{formatTimestamp(log.createdAt)}</span>
+                              </span>
+                              {log.ipAddress && (
+                                <span>IP: {log.ipAddress}</span>
+                              )}
+                              {log.userAgent && (
+                                <span className="max-w-xs truncate">
+                                  {log.userAgent.split(' ')[0]}...
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
                           {getStatusIcon(log.status)}
-                          <Button variant="ghost" size="sm"><Eye className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="sm">
+                            <Eye className="w-4 h-4" />
+                          </Button>
                         </div>
-                      </div>
+ 3                     </div>
                     </div>
                   ))}
                 </div>
@@ -269,6 +313,6 @@ const fetchLogs = async () => {
           )}
         </div>
       </div>
-    </div>
+    </div >
   );
 }

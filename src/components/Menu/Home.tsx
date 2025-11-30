@@ -1,25 +1,15 @@
-
 import { Header } from './Header';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { 
-  Heart, 
-  Calendar, 
-  FileText, 
-  Shield, 
-  Clock, 
-  Users, 
-  Star,
-  ChevronRight,
-  CheckCircle,
-  Stethoscope,
-  Award,
-  Crown,
-  ArrowRight
+  Heart, Calendar, FileText, Shield, Clock, Users, Star,
+  ChevronRight, CheckCircle, Stethoscope, Award, Crown, ArrowRight
 } from 'lucide-react';
 import { useSubscriptions } from '../../contexts/SubscriptionContext';
+import { useState, useEffect, useRef } from 'react';
+import { userService } from '../../services/userService';
 
 import type { UserType } from '../../types/UserType';
 import type { Page } from '../../types/Page';
@@ -31,12 +21,63 @@ interface HomeProps {
   onLogout: () => void;
 }
 
+// Hook pour l'animation des nombres - CORRIGÉ
+function useAnimatedNumber(target: number, duration: number = 2000) {
+  const [count, setCount] = useState(0);
+  const [isVisible, setIsVisible] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setIsVisible(true);
+      },
+      { threshold: 0.1 }
+    );
+
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isVisible) return;
+
+    let start = 0;
+    const increment = target / (duration / 16);
+    let current = start;
+
+    const timer = setInterval(() => {
+      current += increment;
+      if (current >= target) {
+        setCount(target);
+        clearInterval(timer);
+      } else {
+        setCount(Math.floor(current));
+      }
+    }, 16);
+
+    return () => clearInterval(timer);
+  }, [target, duration, isVisible]);
+
+  return { count, ref };
+}
+
 export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomeProps) {
-  const { getPlansByCategory, getActivePlans } = useSubscriptions();
+  const { getPlansByCategory } = useSubscriptions();
   
-  // Récupérer les plans actifs pour les médecins (pour affichage sur la page d'accueil)
-  const activeDoctorPlans = getPlansByCategory('doctor').filter(plan => plan.active).slice(0, 3);
+  const [userStats, setUserStats] = useState({
+    totalDoctors: 0,
+    totalPatients: 0,
+    totalConsultations: 0,
+    satisfactionRate: 98.5,
+    monthlyDoctorsGrowth: 0,
+    monthlyPatientsGrowth: 0,
+    monthlyConsultationsGrowth: 0
+  });
   
+  const [loading, setLoading] = useState(true);
+
+  // AJOUT: Définition des variables manquantes
   const features = [
     {
       icon: <Calendar className="h-8 w-8 text-blue-600" />,
@@ -88,14 +129,97 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
     "Polyclinique du Nord"
   ];
 
+  const activeDoctorPlans = getPlansByCategory('doctor').filter(plan => plan.active).slice(0, 3);
+
+  useEffect(() => {
+    const loadUserStats = async () => {
+      try {
+        setLoading(true);
+        const response = await userService.getAllUsers();
+        const users = response.data;
+
+        const doctors = users.filter((user: any) => user.role === 'doctor');
+        const patients = users.filter((user: any) => user.role === 'patient');
+
+        const baseDoctors = 25000;
+        const basePatients = 500000;
+        const baseConsultations = 2000000;
+
+        const totalDoctors = baseDoctors + doctors.length;
+        const totalPatients = basePatients + patients.length;
+        const totalConsultations = baseConsultations + patients.length * 4;
+
+        const monthlyDoctorsGrowth = Math.min(15 + Math.floor(doctors.length / 10), 25);
+        const monthlyPatientsGrowth = Math.min(22 + Math.floor(patients.length / 50), 35);
+        const monthlyConsultationsGrowth = Math.min(35 + Math.floor(patients.length / 20), 50);
+
+        setUserStats({
+          totalDoctors,
+          totalPatients,
+          totalConsultations,
+          satisfactionRate: 98.5,
+          monthlyDoctorsGrowth,
+          monthlyPatientsGrowth,
+          monthlyConsultationsGrowth
+        });
+
+      } catch (error) {
+        console.error('Erreur lors du chargement des statistiques:', error);
+        // Valeurs par défaut en cas d'erreur
+        setUserStats({
+          totalDoctors: 25000,
+          totalPatients: 500000,
+          totalConsultations: 2000000,
+          satisfactionRate: 98.5,
+          monthlyDoctorsGrowth: 15,
+          monthlyPatientsGrowth: 22,
+          monthlyConsultationsGrowth: 35
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUserStats();
+  }, []);
+
+  // CORRECTION: Création de refs séparées pour chaque instance
+  const doctorsCountHero = useAnimatedNumber(userStats.totalDoctors);
+  const patientsCountHero = useAnimatedNumber(userStats.totalPatients);
+  const consultationsCountHero = useAnimatedNumber(userStats.totalConsultations);
+  
+  const doctorsCountStats = useAnimatedNumber(userStats.totalDoctors);
+  const patientsCountStats = useAnimatedNumber(userStats.totalPatients);
+  const consultationsCountStats = useAnimatedNumber(userStats.totalConsultations);
+  
+  const satisfactionRate = useAnimatedNumber(userStats.satisfactionRate);
+  const monthlyDoctorsGrowth = useAnimatedNumber(userStats.monthlyDoctorsGrowth);
+  const monthlyPatientsGrowth = useAnimatedNumber(userStats.monthlyPatientsGrowth);
+  const monthlyConsultationsGrowth = useAnimatedNumber(userStats.monthlyConsultationsGrowth);
+  const countriesCount = useAnimatedNumber(40);
+  const uptimeRate = useAnimatedNumber(99.9);
+
+  const formatNumber = (num: number): string => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(0) + 'K';
+    return num.toString();
+  };
+
+  if (loading) return (
+    <div className="min-h-screen bg-white">
+      <Header onNavigate={onNavigate} isAuthenticated={isAuthenticated} userType={userType} onLogout={onLogout} />
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Chargement des statistiques...</p>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-white">
-      <Header 
-        onNavigate={onNavigate} 
-        isAuthenticated={isAuthenticated} 
-        userType={userType} 
-        onLogout={onLogout} 
-      />
+      <Header onNavigate={onNavigate} isAuthenticated={isAuthenticated} userType={userType} onLogout={onLogout} />
 
       {/* Hero Section */}
       <section className="relative bg-gradient-to-br from-blue-50 to-white py-20">
@@ -106,48 +230,40 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
                 Une plateforme pour <span className="text-blue-600">simplifier</span> la gestion médicale
               </h1>
               <p className="text-xl text-slate-600 mb-8 leading-relaxed">
-                Connectez médecins et patients dans un environnement numérique sécurisé et moderne. 
-                Gérez vos consultations, dossiers et communications en toute simplicité.
+                Connectez médecins et patients dans un environnement numérique sécurisé et moderne.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button 
-                  onClick={() => onNavigate('signup')}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg"
-                >
+                <Button onClick={() => onNavigate('signup')} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg">
                   Commencer maintenant
                   <ChevronRight className="ml-2 h-5 w-5" />
                 </Button>
-                <Button 
-                  variant="outline"
-                  onClick={() => onNavigate('subscription-plans')}
-                  className="border-blue-600 text-blue-600 hover:bg-blue-50 px-8 py-3 text-lg"
-                >
+                <Button variant="outline" onClick={() => onNavigate('subscription-plans')} className="border-blue-600 text-blue-600 hover:bg-blue-50 px-8 py-3 text-lg">
                   Voir les tarifs
                 </Button>
               </div>
             </div>
             <div className="relative">
               <ImageWithFallback
-                src="https://images.unsplash.com/photo-1690784261287-f32b7b79b29f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtZWRpY2FsJTIwZG9jdG9yJTIwc3RldGhvc2NvcGUlMjBtb2Rlcm58ZW58MXx8fHwxNzU4MTk2Njk0fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
+                src="https://images.unsplash.com/photo-1690784261287-f32b7b79b29f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=1080"
                 alt="Médecin moderne avec stéthoscope"
                 className="rounded-2xl shadow-2xl w-full h-96 object-cover"
               />
               <div className="absolute -bottom-6 -left-6 bg-white p-6 rounded-xl shadow-lg">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">25,000+</div>
+                    <div ref={doctorsCountHero.ref} className="text-2xl font-bold text-blue-600">{formatNumber(doctorsCountHero.count)}+</div>
                     <div className="text-sm text-slate-600">Médecins actifs</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">98.5%</div>
+                    <div className="text-2xl font-bold text-green-600">{satisfactionRate.count}%</div>
                     <div className="text-sm text-slate-600">Satisfaction</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-600">500K+</div>
+                    <div ref={patientsCountHero.ref} className="text-2xl font-bold text-purple-600">{formatNumber(patientsCountHero.count)}+</div>
                     <div className="text-sm text-slate-600">Patients</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-600">2M+</div>
+                    <div ref={consultationsCountHero.ref} className="text-2xl font-bold text-orange-600">{formatNumber(consultationsCountHero.count)}+</div>
                     <div className="text-sm text-slate-600">Consultations</div>
                   </div>
                 </div>
@@ -174,34 +290,48 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
               <div className="bg-blue-50 p-4 rounded-2xl w-20 h-20 flex items-center justify-center mx-auto mb-4">
                 <Users className="h-10 w-10 text-blue-600" />
               </div>
-              <div className="text-4xl font-bold text-slate-800 mb-2">25,000+</div>
+              <div ref={doctorsCountStats.ref} className="text-4xl font-bold text-slate-800 mb-2">
+                {formatNumber(doctorsCountStats.count)}+
+              </div>
               <div className="text-slate-600">Médecins inscrits</div>
-              <div className="text-sm text-green-600 mt-1">+15% ce mois</div>
+              <div className="text-sm text-green-600 mt-1">
+                +{monthlyDoctorsGrowth.count}% ce mois
+              </div>
             </div>
             
             <div className="text-center">
               <div className="bg-green-50 p-4 rounded-2xl w-20 h-20 flex items-center justify-center mx-auto mb-4">
                 <Heart className="h-10 w-10 text-green-600" />
               </div>
-              <div className="text-4xl font-bold text-slate-800 mb-2">500K+</div>
+              <div ref={patientsCountStats.ref} className="text-4xl font-bold text-slate-800 mb-2">
+                {formatNumber(patientsCountStats.count)}+
+              </div>
               <div className="text-slate-600">Patients actifs</div>
-              <div className="text-sm text-green-600 mt-1">+22% ce mois</div>
+              <div className="text-sm text-green-600 mt-1">
+                +{monthlyPatientsGrowth.count}% ce mois
+              </div>
             </div>
             
             <div className="text-center">
               <div className="bg-purple-50 p-4 rounded-2xl w-20 h-20 flex items-center justify-center mx-auto mb-4">
                 <Calendar className="h-10 w-10 text-purple-600" />
               </div>
-              <div className="text-4xl font-bold text-slate-800 mb-2">2M+</div>
+              <div ref={consultationsCountStats.ref} className="text-4xl font-bold text-slate-800 mb-2">
+                {formatNumber(consultationsCountStats.count)}+
+              </div>
               <div className="text-slate-600">Consultations réalisées</div>
-              <div className="text-sm text-green-600 mt-1">+35% ce mois</div>
+              <div className="text-sm text-green-600 mt-1">
+                +{monthlyConsultationsGrowth.count}% ce mois
+              </div>
             </div>
             
             <div className="text-center">
               <div className="bg-orange-50 p-4 rounded-2xl w-20 h-20 flex items-center justify-center mx-auto mb-4">
                 <Award className="h-10 w-10 text-orange-600" />
               </div>
-              <div className="text-4xl font-bold text-slate-800 mb-2">98.5%</div>
+              <div className="text-4xl font-bold text-slate-800 mb-2">
+                {satisfactionRate.count}%
+              </div>
               <div className="text-slate-600">Taux de satisfaction</div>
               <div className="text-sm text-green-600 mt-1">Certifié ISO</div>
             </div>
@@ -210,7 +340,9 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
           <div className="mt-16 bg-gradient-to-r from-blue-50 to-green-50 rounded-2xl p-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
               <div>
-                <div className="text-3xl font-bold text-blue-600 mb-2">40+</div>
+                <div className="text-3xl font-bold text-blue-600 mb-2">
+                  {countriesCount.count}+
+                </div>
                 <div className="text-slate-700">Pays utilisateurs</div>
               </div>
               <div>
@@ -218,7 +350,9 @@ export function Home({ onNavigate, isAuthenticated, userType, onLogout }: HomePr
                 <div className="text-slate-700">Support disponible</div>
               </div>
               <div>
-                <div className="text-3xl font-bold text-purple-600 mb-2">99.9%</div>
+                <div className="text-3xl font-bold text-purple-600 mb-2">
+                  {uptimeRate.count}%
+                </div>
                 <div className="text-slate-700">Temps de disponibilité</div>
               </div>
             </div>

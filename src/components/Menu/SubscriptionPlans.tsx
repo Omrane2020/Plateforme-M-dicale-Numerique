@@ -1,4 +1,4 @@
-import  { useState } from 'react';
+import { useState } from 'react';
 import { Header } from './Header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -30,47 +30,93 @@ import {
 } from 'lucide-react';
 import { useSubscriptions } from '../../contexts/SubscriptionContext';
 import type { UserType } from '../../types/UserType';
+
 interface SubscriptionPlansProps {
   onNavigate: (page: string) => void;
   isAuthenticated: boolean;
-  userType: UserType ;
+  userType: UserType;
   onLogout: () => void;
   onSelectPlan: (plan: any) => void;
 }
 
 export function SubscriptionPlans({ onNavigate, isAuthenticated, userType, onLogout, onSelectPlan }: SubscriptionPlansProps) {
   const { getPlansByCategory } = useSubscriptions();
-  const [selectedPlan, setSelectedPlan] = useState<string>('');
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedPlanType, setSelectedPlanType] = useState<'doctor' | 'clinic' | 'patient'>('doctor');
+
+  // Fonction pour normaliser les features
+  const normalizeFeatures = (features: any): Array<{name: string, included: boolean}> => {
+    // Si c'est déjà un tableau, le retourner
+    if (Array.isArray(features)) {
+      return features.map(feature => 
+        typeof feature === 'string' 
+          ? { name: feature, included: true }
+          : feature
+      );
+    }
+    
+    // Si c'est une chaîne JSON, la parser
+    if (typeof features === 'string') {
+      try {
+        const parsed = JSON.parse(features);
+        if (Array.isArray(parsed)) {
+          return parsed.map(feature => 
+            typeof feature === 'string' 
+              ? { name: feature, included: true }
+              : feature
+          );
+        }
+      } catch (error) {
+        console.error('❌ Erreur parsing JSON features:', error);
+      }
+    }
+    
+    // Fallback si vide ou invalide
+    console.warn('⚠️ Features invalides, utilisation du fallback');
+    return [
+      { name: 'Fonctionnalité de base', included: true },
+      { name: 'Support standard', included: true }
+    ];
+  };
 
   // Récupérer les plans depuis le contexte (seulement les actifs)
   const allDoctorPlans = getPlansByCategory('doctor').filter(p => p.active);
   const allClinicPlans = getPlansByCategory('clinic').filter(p => p.active);
   const allPatientPlans = getPlansByCategory('patient').filter(p => p.active);
 
-  // Plans médecins avec icônes
+  // DEBUG: Vérifiez la structure des plans
+  console.log('🔍 Plans médecins:', allDoctorPlans);
+  if (allDoctorPlans.length > 0) {
+    console.log('🔍 Premier plan médecin:', allDoctorPlans[0]);
+    console.log('🔍 Features du premier plan:', allDoctorPlans[0].features);
+    console.log('🔍 Type de features:', typeof allDoctorPlans[0].features);
+  }
+
+  // Plans médecins avec icônes et features normalisées
   const doctorPlans = allDoctorPlans.map(plan => ({
     ...plan,
     icon: plan.color === 'green' ? <Star className="w-8 h-8" /> : 
           plan.color === 'purple' ? <Crown className="w-8 h-8" /> : 
-          <Users className="w-8 h-8" />
+          <Users className="w-8 h-8" />,
+    features: normalizeFeatures(plan.features) 
   }));
 
-  // Plans cliniques avec icônes  
+  // Plans cliniques avec icônes et features normalisées  
   const clinicPlans = allClinicPlans.map(plan => ({
     ...plan,
     icon: plan.color === 'green' ? <Zap className="w-8 h-8" /> : 
           plan.color === 'purple' ? <Crown className="w-8 h-8" /> : 
-          <Shield className="w-8 h-8" />
+          <Shield className="w-8 h-8" />,
+    features: normalizeFeatures(plan.features) 
   }));
 
-  // Plans patients avec icônes
+  // Plans patients avec icônes et features normalisées
   const patientPlans = allPatientPlans.map(plan => ({
     ...plan,
     icon: plan.color === 'green' ? <Heart className="w-8 h-8" /> : 
           plan.color === 'purple' ? <Users className="w-8 h-8" /> : 
-          <Star className="w-8 h-8" />
+          <Star className="w-8 h-8" />,
+    features: normalizeFeatures(plan.features)
   }));
 
   const getCurrentPlans = () => {
@@ -84,215 +130,6 @@ export function SubscriptionPlans({ onNavigate, isAuthenticated, userType, onLog
 
   const plans = getCurrentPlans();
 
-  /* ANCIEN CODE (maintenant géré par le contexte SubscriptionContext)
-  const doctorPlans = [
-    {
-      id: 'doctor-basic',
-      name: 'Médecin Solo',
-      description: 'Pour les médecins débutants',
-      icon: <Users className="w-8 h-8" />,
-      monthlyPrice: 29,
-      yearlyPrice: 290,
-      popular: false,
-      color: 'blue',
-      features: [
-        { name: 'Jusqu\'à 50 patients', included: true },
-        { name: 'Gestion RDV médecin (interface dédiée)', included: true },
-        { name: 'Dossiers médicaux basiques', included: true },
-        { name: 'Prescriptions électroniques', included: true },
-        { name: 'Support email', included: true },
-        { name: 'Rapports basiques', included: true },
-        { name: 'Application mobile', included: false },
-        { name: 'Téléconsultation', included: false },
-        { name: '1 secrétaire avec interface propre RDV', included: true },
-        { name: 'API intégration', included: false }
-      ]
-    },
-    {
-      id: 'doctor-professional',
-      name: 'Cabinet Médical',
-      description: 'Pour les cabinets établis',
-      icon: <Star className="w-8 h-8" />,
-      monthlyPrice: 59,
-      yearlyPrice: 590,
-      popular: true,
-      color: 'green',
-      features: [
-        { name: 'Jusqu\'à 200 patients', included: true },
-        { name: 'Gestion RDV médecin avancée (interface dédiée)', included: true },
-        { name: 'Dossiers médicaux avancés', included: true },
-        { name: 'Prescriptions électroniques', included: true },
-        { name: 'Support email & téléphone', included: true },
-        { name: 'Rapports détaillés', included: true },
-        { name: 'Application mobile', included: true },
-        { name: 'Téléconsultation (50/mois)', included: true },
-        { name: '3 secrétaires avec interface propre RDV', included: true },
-        { name: 'API intégration', included: true }
-      ]
-    },
-    {
-      id: 'doctor-premium',
-      name: 'Multi-Praticiens',
-      description: 'Pour les groupes de médecins',
-      icon: <Crown className="w-8 h-8" />,
-      monthlyPrice: 99,
-      yearlyPrice: 990,
-      popular: false,
-      color: 'purple',
-      features: [
-        { name: 'Patients illimités', included: true },
-        { name: 'Système RDV multi-praticiens (interfaces dédiées)', included: true },
-        { name: 'Dossiers médicaux complets', included: true },
-        { name: 'Prescriptions électroniques', included: true },
-        { name: 'Support 24/7', included: true },
-        { name: 'Analytics avancés', included: true },
-        { name: 'Application mobile', included: true },
-        { name: 'Téléconsultation illimitée', included: true },
-        { name: 'Secrétaires illimités (interface propre chacun)', included: true },
-        { name: 'API & intégrations complètes', included: true }
-      ]
-    }
-  ];
-
-  const clinicPlans = [
-    {
-      id: 'clinic-standard',
-      name: 'Clinique Standard',
-      description: 'Pour les petites cliniques',
-      icon: <Shield className="w-8 h-8" />,
-      monthlyPrice: 199,
-      yearlyPrice: 1990,
-      popular: false,
-      color: 'blue',
-      features: [
-        { name: 'Jusqu\'à 10 médecins', included: true },
-        { name: 'Patients illimités', included: true },
-        { name: 'Gestion multi-services', included: true },
-        { name: 'Système de facturation', included: true },
-        { name: 'Gestion des lits', included: true },
-        { name: 'Rapports financiers', included: true },
-        { name: 'Support dédié', included: true },
-        { name: 'Formation du personnel', included: true },
-        { name: 'Sauvegarde quotidienne', included: true },
-        { name: 'Intégration laboratoire', included: true }
-      ]
-    },
-    {
-      id: 'clinic-enterprise',
-      name: 'Hôpital Enterprise',
-      description: 'Pour les grandes structures',
-      icon: <Zap className="w-8 h-8" />,
-      monthlyPrice: 499,
-      yearlyPrice: 4990,
-      popular: true,
-      color: 'green',
-      features: [
-        { name: 'Médecins illimités', included: true },
-        { name: 'Patients illimités', included: true },
-        { name: 'Gestion hospitalière complète', included: true },
-        { name: 'Système ERP intégré', included: true },
-        { name: 'Gestion des urgences', included: true },
-        { name: 'BI et analytics avancés', included: true },
-        { name: 'Support 24/7 prioritaire', included: true },
-        { name: 'Formation continue', included: true },
-        { name: 'Sécurité renforcée', included: true },
-        { name: 'API personnalisées', included: true }
-      ]
-    },
-    {
-      id: 'clinic-custom',
-      name: 'Solution Sur-Mesure',
-      description: 'Développement personnalisé',
-      icon: <Crown className="w-8 h-8" />,
-      monthlyPrice: 999,
-      yearlyPrice: 9990,
-      popular: false,
-      color: 'purple',
-      features: [
-        { name: 'Architecture personnalisée', included: true },
-        { name: 'Développement sur-mesure', included: true },
-        { name: 'Intégrations spécifiques', included: true },
-        { name: 'Conformité réglementaire', included: true },
-        { name: 'Déploiement sur site', included: true },
-        { name: 'Support technique dédié', included: true },
-        { name: 'SLA garantis', included: true },
-        { name: 'Formation personnalisée', included: true },
-        { name: 'Maintenance incluse', included: true },
-        { name: 'Évolutions continues', included: true }
-      ]
-    }
-  ];
-
-  const patientPlans = [
-    {
-      id: 'patient-basic',
-      name: 'Patient Gratuit',
-      description: 'Accès de base gratuit',
-      icon: <Heart className="w-8 h-8" />,
-      monthlyPrice: 0,
-      yearlyPrice: 0,
-      popular: true,
-      color: 'green',
-      features: [
-        { name: 'Prise de rendez-vous', included: true },
-        { name: 'Consultation de dossier', included: true },
-        { name: 'Historique médical', included: true },
-        { name: 'Rappels de RDV', included: true },
-        { name: 'Application mobile', included: true },
-        { name: 'Support client', included: true },
-        { name: 'Téléconsultation', included: false },
-        { name: 'Suivi personnalisé', included: false },
-        { name: 'Analyses avancées', included: false },
-        { name: 'Support prioritaire', included: false }
-      ]
-    },
-    {
-      id: 'patient-premium',
-      name: 'Patient Premium',
-      description: 'Suivi de santé avancé',
-      icon: <Star className="w-8 h-8" />,
-      monthlyPrice: 9,
-      yearlyPrice: 90,
-      popular: false,
-      color: 'blue',
-      features: [
-        { name: 'Toutes fonctions gratuites', included: true },
-        { name: 'Téléconsultations illimitées', included: true },
-        { name: 'Suivi santé personnalisé', included: true },
-        { name: 'Analyses et graphiques', included: true },
-        { name: 'Rappels médicaments', included: true },
-        { name: 'Objectifs de santé', included: true },
-        { name: 'Partage famille', included: true },
-        { name: 'Support prioritaire', included: true },
-        { name: 'Conseils IA', included: true },
-        { name: 'Espace de stockage étendu', included: true }
-      ]
-    },
-    {
-      id: 'patient-family',
-      name: 'Famille Premium',
-      description: 'Pour toute la famille',
-      icon: <Users className="w-8 h-8" />,
-      monthlyPrice: 19,
-      yearlyPrice: 190,
-      popular: false,
-      color: 'purple',
-      features: [
-        { name: 'Jusqu\'à 6 membres', included: true },
-        { name: 'Toutes fonctions Premium', included: true },
-        { name: 'Carnet de santé famille', included: true },
-        { name: 'Suivi enfants/seniors', included: true },
-        { name: 'Urgences famille', included: true },
-        { name: 'Partage avec médecins', included: true },
-        { name: 'Historique génétique', included: true },
-        { name: 'Conseiller santé dédié', included: true },
-        { name: 'Assurance santé intégrée', included: true },
-        { name: 'Concierge médical', included: true }
-      ]
-    }
-  ];
-  */
-
   const handleSelectPlan = (plan: any) => {
     const selectedPlanData = {
       ...plan,
@@ -302,9 +139,8 @@ export function SubscriptionPlans({ onNavigate, isAuthenticated, userType, onLog
     };
     
     onSelectPlan(selectedPlanData);
-      console.log("[Subscription] Navigation vers:", `payment/${plan.id}`);
-
-  onNavigate(`payment/${plan.id}`); 
+    console.log("[Subscription] Navigation vers:", `payment/${plan.id}`);
+    onNavigate(`payment/${plan.id}`); 
   };
 
   const getPrice = (plan: any) => {

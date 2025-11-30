@@ -22,7 +22,7 @@ interface UseSubscriptionReturn {
   togglePlanStatus: (id: string) => Promise<SubscriptionModel>;
   clonePlan: (id: string) => Promise<SubscriptionModel>;
   
-  // Filtres et recherche
+  // Filtres et recherche - MAINTENANT SYNCHRONES
   getPlansByCategory: (category: 'doctor' | 'clinic' | 'patient') => SubscriptionModel[];
   getActivePlans: () => SubscriptionModel[];
   searchPlans: (query: string) => SubscriptionModel[];
@@ -130,37 +130,32 @@ export function useSubscription(): UseSubscriptionReturn {
     }
   }, [loadPlans]);
 
-  // Filtrer par catégorie
+  // Filtrer par catégorie - SYNCHRONE (utilise les plans déjà chargés)
   const getPlansByCategory = useCallback(
     (category: 'doctor' | 'clinic' | 'patient'): SubscriptionModel[] => {
-      return plans
-        .filter(plan => plan.category === category)
-        .sort((a, b) => a.order - b.order);
+      return plans.filter(plan => plan.category === category);
     },
     [plans]
   );
 
-  // Récupérer les plans actifs
+  // Récupérer les plans actifs - SYNCHRONE
   const getActivePlans = useCallback((): SubscriptionModel[] => {
-    return plans
-      .filter(plan => plan.active)
-      .sort((a, b) => a.order - b.order);
+    return plans.filter(plan => plan.active);
   }, [plans]);
 
-  // Rechercher des plans
+  // Rechercher des plans - SYNCHRONE
   const searchPlans = useCallback(
     (query: string): SubscriptionModel[] => {
       const lowercaseQuery = query.toLowerCase();
-      return plans.filter(
-        plan =>
-          plan.name.toLowerCase().includes(lowercaseQuery) ||
-          plan.description.toLowerCase().includes(lowercaseQuery)
+      return plans.filter(plan =>
+        plan.name.toLowerCase().includes(lowercaseQuery) ||
+        plan.description.toLowerCase().includes(lowercaseQuery)
       );
     },
     [plans]
   );
 
-  // Trier les plans
+  // Trier les plans - SYNCHRONE
   const sortPlans = useCallback(
     (sortBy: 'name' | 'price' | 'order' | 'popular'): SubscriptionModel[] => {
       return SubscriptionController.sortPlans(plans, sortBy);
@@ -173,7 +168,7 @@ export function useSubscription(): UseSubscriptionReturn {
     await loadPlans();
   }, [loadPlans]);
 
-  // Récupérer un plan par ID
+  // Récupérer un plan par ID - SYNCHRONE
   const getPlanById = useCallback(
     (id: string): SubscriptionModel | undefined => {
       return plans.find(plan => plan.id === id);

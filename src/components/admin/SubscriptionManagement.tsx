@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AdminSidebar } from '../admin/AdminSidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -39,14 +39,18 @@ import {
   Eye,
   EyeOff,
   Star,
-  Crown,
   Users,
   Shield,
   Heart,
-  DollarSign,
   Layers
 } from 'lucide-react';
-import { useSubscriptions, type SubscriptionPlan,type SubscriptionFeature } from '../../contexts/SubscriptionContext';
+import { 
+  useSubscriptions, 
+  type SubscriptionPlan, 
+  type SubscriptionFeature,
+  type CreateSubscriptionPlanDTO, 
+  type UpdateSubscriptionPlanDTO 
+} from '../../contexts/SubscriptionContext';
 
 interface SubscriptionManagementProps {
   onNavigate: (page: string) => void;
@@ -54,7 +58,7 @@ interface SubscriptionManagementProps {
 }
 
 export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionManagementProps) {
-  const { plans, addPlan, updatePlan, deletePlan, togglePlanStatus } = useSubscriptions();
+  const { plans, stats, addPlan, updatePlan, deletePlan, togglePlanStatus } = useSubscriptions();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -62,14 +66,14 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
   const [filterCategory, setFilterCategory] = useState<'all' | 'doctor' | 'clinic' | 'patient'>('all');
 
   // Form state
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<CreateSubscriptionPlanDTO>({
     name: '',
     description: '',
-    category: 'doctor' as 'doctor' | 'clinic' | 'patient',
+    category: 'doctor',
     monthlyPrice: 0,
     yearlyPrice: 0,
     popular: false,
-    color: 'blue' as 'blue' | 'green' | 'purple' | 'orange',
+    color: 'blue',
     order: 1,
     features: [] as SubscriptionFeature[]
   });
@@ -132,7 +136,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
   const handleToggleFeature = (index: number) => {
     setFormData({
       ...formData,
-      features: formData.features.map((f, i) => 
+      features: formData.features.map((f, i) =>
         i === index ? { ...f, included: !f.included } : f
       )
     });
@@ -140,7 +144,6 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
 
   const handleAddPlan = async () => {
     try {
-      // Créer un DTO sans l'ID (généré par le backend)
       await addPlan(formData);
       setIsAddDialogOpen(false);
     } catch (error) {
@@ -152,7 +155,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
   const handleUpdatePlan = async () => {
     if (selectedPlan) {
       try {
-        await updatePlan(selectedPlan.id, formData);
+        await updatePlan(Number(selectedPlan.id), formData);
         setIsEditDialogOpen(false);
         setSelectedPlan(null);
       } catch (error) {
@@ -165,7 +168,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
   const handleDeletePlan = async () => {
     if (selectedPlan) {
       try {
-        await deletePlan(selectedPlan.id);
+        await deletePlan(Number(selectedPlan.id));
         setIsDeleteDialogOpen(false);
         setSelectedPlan(null);
       } catch (error) {
@@ -175,8 +178,8 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
     }
   };
 
-  const filteredPlans = filterCategory === 'all' 
-    ? plans 
+  const filteredPlans = filterCategory === 'all'
+    ? plans
     : plans.filter(p => p.category === filterCategory);
 
   const getCategoryIcon = (category: string) => {
@@ -210,7 +213,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
   return (
     <div className="flex h-screen bg-gray-50">
       <AdminSidebar onNavigate={onNavigate} onLogout={onLogout} activePage="subscription-management" />
-      
+
       <div className="flex-1 overflow-auto">
         <div className="p-8">
           {/* Header */}
@@ -227,7 +230,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
             </Button>
           </div>
 
-          {/* Stats */}
+          {/* Stats - Utilisez les stats du backend */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -235,9 +238,9 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                 <Layers className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{plans.length}</div>
+                <div className="text-2xl font-bold">{stats.total}</div>
                 <p className="text-xs text-muted-foreground">
-                  {plans.filter(p => p.active).length} actifs
+                  {stats.active} actifs
                 </p>
               </CardContent>
             </Card>
@@ -249,7 +252,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {plans.filter(p => p.category === 'doctor').length}
+                  {stats?.byCategory?.doctor??0}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Plans médecins
@@ -264,7 +267,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {plans.filter(p => p.category === 'clinic').length}
+                  {stats?.byCategory?.clinic??0}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Plans cliniques
@@ -279,7 +282,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {plans.filter(p => p.category === 'patient').length}
+                  {stats?.byCategory?.patient??0}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Plans patients
@@ -296,7 +299,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                 size="sm"
                 onClick={() => setFilterCategory('all')}
               >
-                Tous ({plans.length})
+                Tous ({stats?.total??0})
               </Button>
               <Button
                 variant={filterCategory === 'doctor' ? 'default' : 'outline'}
@@ -304,7 +307,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                 onClick={() => setFilterCategory('doctor')}
               >
                 <Users className="w-4 h-4 mr-1" />
-                Médecins ({plans.filter(p => p.category === 'doctor').length})
+                Médecins ({stats?.byCategory?.doctor??0})
               </Button>
               <Button
                 variant={filterCategory === 'clinic' ? 'default' : 'outline'}
@@ -312,7 +315,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                 onClick={() => setFilterCategory('clinic')}
               >
                 <Shield className="w-4 h-4 mr-1" />
-                Cliniques ({plans.filter(p => p.category === 'clinic').length})
+                Cliniques ({stats?.byCategory?.clinic??0})
               </Button>
               <Button
                 variant={filterCategory === 'patient' ? 'default' : 'outline'}
@@ -320,7 +323,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                 onClick={() => setFilterCategory('patient')}
               >
                 <Heart className="w-4 h-4 mr-1" />
-                Patients ({plans.filter(p => p.category === 'patient').length})
+                Patients ({stats?.byCategory?.patient??0})
               </Button>
             </div>
           </div>
@@ -356,13 +359,13 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                       <span className="text-gray-500">/mois</span>
                     </div>
                     <div className="text-sm text-gray-500 mt-1">
-                      {plan.yearlyPrice}€/an (économie de {plan.monthlyPrice * 12 - plan.yearlyPrice}€)
+                      {plan.yearlyPrice}€/an (économie de {plan.yearlySavings}€)
                     </div>
                   </div>
 
                   <div className="space-y-2 mb-4">
                     <div className="text-sm text-gray-600">
-                      {plan.features.filter(f => f.included).length} fonctionnalités incluses
+                      {plan.includedFeaturesCount} fonctionnalités incluses
                     </div>
                   </div>
 
@@ -370,7 +373,7 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                     <div className="flex items-center space-x-2">
                       <Switch
                         checked={plan.active}
-                        onCheckedChange={() => togglePlanStatus(plan.id)}
+                        onCheckedChange={() => togglePlanStatus(Number(plan.id))}
                       />
                       <span className="text-sm">
                         {plan.active ? <Eye className="w-4 h-4 text-green-600" /> : <EyeOff className="w-4 h-4 text-gray-400" />}
@@ -473,8 +476,10 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                 <Input
                   id="monthlyPrice"
                   type="number"
+                  min="0"
+                  step="0.01"
                   value={formData.monthlyPrice}
-                  onChange={(e) => setFormData({ ...formData, monthlyPrice: parseFloat(e.target.value) })}
+                  onChange={(e) => setFormData({ ...formData, monthlyPrice: parseFloat(e.target.value) || 0 })}
                 />
               </div>
               <div>
@@ -482,8 +487,10 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                 <Input
                   id="yearlyPrice"
                   type="number"
+                  min="0"
+                  step="0.01"
                   value={formData.yearlyPrice}
-                  onChange={(e) => setFormData({ ...formData, yearlyPrice: parseFloat(e.target.value) })}
+                  onChange={(e) => setFormData({ ...formData, yearlyPrice: parseFloat(e.target.value) || 0 })}
                 />
               </div>
             </div>
@@ -511,8 +518,9 @@ export function SubscriptionManagement({ onNavigate, onLogout }: SubscriptionMan
                 <Input
                   id="order"
                   type="number"
+                  min="1"
                   value={formData.order}
-                  onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) })}
+                  onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) || 1 })}
                 />
               </div>
             </div>

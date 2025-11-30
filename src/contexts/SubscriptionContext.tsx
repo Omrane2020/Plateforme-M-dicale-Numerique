@@ -1,225 +1,219 @@
-import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import SubscriptionApiService from '../services/api/subscriptionApi';
-import type  { SubscriptionPlan, CreateSubscriptionPlanDTO, UpdateSubscriptionPlanDTO } from '../types/subscription';
+import { createContext, useContext, useState, useEffect, type ReactNode, useMemo } from 'react';
+import subscriptionApi, {
+  type SubscriptionPlan,
+  type CreateSubscriptionPlanDTO,
+  type UpdateSubscriptionPlanDTO,
+  type SubscriptionFeature
+} from '../services/api/subscriptionApi';
 
-// Re-export des types pour la compatibilité
-export type { SubscriptionPlan } from '../types/subscription';
-export type { SubscriptionFeature } from '../types/subscription';
+// Interface pour les statistiques
+interface SubscriptionStats {
+  total: number;
+  active: number;
+  inactive: number;
+  byCategory: {
+    doctor: number;
+    clinic: number;
+    patient: number;
+  };
+  averagePrice?: {
+    monthly: number;
+    yearly: number;
+  };
+}
 
 interface SubscriptionContextType {
   plans: SubscriptionPlan[];
+  stats: SubscriptionStats;
   loading: boolean;
   error: string | null;
+  // Fonctions de gestion
   addPlan: (plan: CreateSubscriptionPlanDTO) => Promise<void>;
-  updatePlan: (id: string, plan: UpdateSubscriptionPlanDTO) => Promise<void>;
-  deletePlan: (id: string) => Promise<void>;
-  togglePlanStatus: (id: string) => Promise<void>;
-  getPlansByCategory: (category: 'doctor' | 'clinic' | 'patient') => SubscriptionPlan[];
-  getActivePlans: () => SubscriptionPlan[];
+  updatePlan: (id: number, plan: UpdateSubscriptionPlanDTO) => Promise<void>;
+  deletePlan: (id: number) => Promise<void>;
+  togglePlanStatus: (id: number) => Promise<void>;
+  clonePlan: (id: number) => Promise<void>;
+  searchPlans: (query: string) => Promise<SubscriptionPlan[]>;
   refreshPlans: () => Promise<void>;
+  clearError: () => void;
+  // Fonctions utilitaires
+  getPlansByCategory: (category: string) => SubscriptionPlan[];
+  getActivePlans: () => SubscriptionPlan[];
+  getPlanById: (id: number) => SubscriptionPlan | undefined;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
-/**
- * Provider pour la gestion des abonnements
- * 
- * ARCHITECTURE BACKEND/FRONTEND:
- * - Ce contexte utilise le service API (SubscriptionApiService)
- * - Le service API communique avec la couche base de données
- * - Les modifications de l'admin sont automatiquement reflétées dans toute l'application
- * 
- * FLUX DE DONNÉES:
- * 1. Admin modifie un plan via SubscriptionManagement
- * 2. Le composant appelle addPlan/updatePlan/deletePlan du contexte
- * 3. Le contexte appelle SubscriptionApiService
- * 4. L'API met à jour la base de données (MySQL simulé avec localStorage)
- * 5. Le contexte recharge les plans et notifie tous les composants
- * 6. La page Home affiche automatiquement les plans mis à jour
- */
+// Stats par défaut
+const defaultStats: SubscriptionStats = {
+  total: 0,
+  active: 0,
+  inactive: 0,
+  byCategory: {
+    doctor: 0,
+    clinic: 0,
+    patient: 0
+  }
+};
+
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [stats, setStats] = useState<SubscriptionStats>(defaultStats);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Charger les plans au montage du composant
-  useEffect(() => {
-    loadPlans();
-  }, []);
+  // Fonctions utilitaires pour filtrer les plans
+  const getPlansByCategory = (category: string): SubscriptionPlan[] => {
+    return plans.filter(plan => plan.category === category);
+  };
 
-  /**
-   * Charge tous les plans depuis l'API
-   * Cette fonction est appelée automatiquement et après chaque modification
-   */
+  const getActivePlans = (): SubscriptionPlan[] => {
+    return plans.filter(plan => plan.active);
+  };
+
+  const getPlanById = (id: number): SubscriptionPlan | undefined => {
+    return plans.find(plan => plan.id === id);
+  };
+
   const loadPlans = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      console.log('[Context] Chargement des plans depuis l\'API...');
-      const data = await SubscriptionApiService.getAllPlans();
-      
-      setPlans(data);
-      console.log('[Context] Plans chargés:', data.length);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erreur de chargement';
+      const { plans: plansData, stats: statsData } = await subscriptionApi.getAllPlans();
+      setPlans(plansData);
+      setStats(statsData || defaultStats);
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || 'Erreur de chargement des abonnements';
       setError(errorMessage);
-      console.error('[Context] Erreur:', errorMessage);
+      console.error('Erreur lors du chargement des plans:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Ajoute un nouveau plan
-   * L'admin peut créer de nouveaux plans qui apparaîtront automatiquement sur la page Home
-   */
+  useEffect(() => {
+    loadPlans();
+  }, []);
+
   const addPlan = async (planData: CreateSubscriptionPlanDTO) => {
     try {
       setError(null);
-      
-      console.log('[Context] Création d\'un nouveau plan...');
-      await SubscriptionApiService.createPlan(planData);
-      
-      // Recharger tous les plans pour synchroniser l'affichage
+      await subscriptionApi.createPlan(planData);
       await loadPlans();
-      
-      console.log('[Context] Plan créé avec succès');
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erreur de création';
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la création';
       setError(errorMessage);
-      console.error('[Context] Erreur:', errorMessage);
-      throw err;
+      throw new Error(errorMessage);
     }
   };
 
-  /**
-   * Met à jour un plan existant
-   * Les modifications sont immédiatement visibles sur toutes les pages
-   */
-  const updatePlan = async (id: string, updates: UpdateSubscriptionPlanDTO) => {
+  const updatePlan = async (id: number, updates: UpdateSubscriptionPlanDTO) => {
     try {
       setError(null);
-      
-      console.log('[Context] Mise à jour du plan:', id);
-      await SubscriptionApiService.updatePlan(id, updates);
-      
-      // Recharger tous les plans pour synchroniser l'affichage
+      await subscriptionApi.updatePlan(id.toString(), updates);
       await loadPlans();
-      
-      console.log('[Context] Plan mis à jour avec succès');
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erreur de mise à jour';
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la mise à jour';
       setError(errorMessage);
-      console.error('[Context] Erreur:', errorMessage);
-      throw err;
+      throw new Error(errorMessage);
     }
   };
 
-  /**
-   * Supprime un plan
-   * Le plan disparaîtra automatiquement de la page Home et de toutes les autres pages
-   */
-  const deletePlan = async (id: string) => {
+  const deletePlan = async (id: number) => {
     try {
       setError(null);
-      
-      console.log('[Context] Suppression du plan:', id);
-      await SubscriptionApiService.deletePlan(id);
-      
-      // Recharger tous les plans pour synchroniser l'affichage
+      await subscriptionApi.deletePlan(id.toString());
       await loadPlans();
-      
-      console.log('[Context] Plan supprimé avec succès');
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erreur de suppression';
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la suppression';
       setError(errorMessage);
-      console.error('[Context] Erreur:', errorMessage);
-      throw err;
+      throw new Error(errorMessage);
     }
   };
 
-  /**
-   * Active ou désactive un plan
-   * Les plans désactivés n'apparaissent plus sur la page Home
-   */
-  const togglePlanStatus = async (id: string) => {
+  const togglePlanStatus = async (id: number) => {
     try {
       setError(null);
-      
-      console.log('[Context] Changement de statut du plan:', id);
-      await SubscriptionApiService.togglePlanStatus(id);
-      
-      // Recharger tous les plans pour synchroniser l'affichage
+      await subscriptionApi.togglePlanStatus(id.toString());
       await loadPlans();
-      
-      console.log('[Context] Statut modifié avec succès');
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erreur de modification';
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || 'Erreur lors du changement de statut';
       setError(errorMessage);
-      console.error('[Context] Erreur:', errorMessage);
-      throw err;
+      throw new Error(errorMessage);
     }
   };
 
-  /**
-   * Récupère les plans d'une catégorie spécifique
-   * Utilisé par la page SubscriptionPlans pour afficher les plans par catégorie
-   */
-  const getPlansByCategory = (category: 'doctor' | 'clinic' | 'patient'): SubscriptionPlan[] => {
-    return plans
-      .filter(plan => plan.category === category)
-      .sort((a, b) => a.order - b.order);
+  const clonePlan = async (id: number) => {
+    try {
+      setError(null);
+      await subscriptionApi.clonePlan(id.toString());
+      await loadPlans();
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || 'Erreur lors du clonage';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
   };
 
-  /**
-   * Récupère uniquement les plans actifs
-   * Utilisé par la page Home pour n'afficher que les plans disponibles
-   */
-  const getActivePlans = (): SubscriptionPlan[] => {
-    return plans
-      .filter(plan => plan.active)
-      .sort((a, b) => a.order - b.order);
+  const searchPlans = async (query: string): Promise<SubscriptionPlan[]> => {
+    try {
+      setError(null);
+      return await subscriptionApi.searchPlans(query);
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la recherche';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
   };
 
-  /**
-   * Recharge manuellement les plans depuis l'API
-   * Utile pour forcer une synchronisation
-   */
   const refreshPlans = async () => {
     await loadPlans();
   };
 
+  const clearError = () => {
+    setError(null);
+  };
+
+  // ✅ useMemo placé APRÈS toutes les définitions de fonctions
+  const memoizedValues = useMemo(() => ({
+    plans,
+    stats,
+    loading,
+    error,
+    // Fonctions de gestion
+    addPlan,
+    updatePlan,
+    deletePlan,
+    togglePlanStatus,
+    clonePlan,
+    searchPlans,
+    refreshPlans,
+    clearError,
+    // Fonctions utilitaires
+    getPlansByCategory,
+    getActivePlans,
+    getPlanById
+  }), [plans, stats, loading, error]);
+
   return (
-    <SubscriptionContext.Provider value={{
-      plans,
-      loading,
-      error,
-      addPlan,
-      updatePlan,
-      deletePlan,
-      togglePlanStatus,
-      getPlansByCategory,
-      getActivePlans,
-      refreshPlans
-    }}>
+    <SubscriptionContext.Provider value={memoizedValues}>
       {children}
     </SubscriptionContext.Provider>
   );
 }
 
-/**
- * Hook personnalisé pour utiliser le contexte des abonnements
- * 
- * UTILISATION:
- * ```tsx
- * const { plans, addPlan, updatePlan, deletePlan } = useSubscriptions();
- * ```
- */
 export function useSubscriptions() {
   const context = useContext(SubscriptionContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useSubscriptions must be used within a SubscriptionProvider');
   }
   return context;
 }
+
+// Export des types pour une utilisation facile
+export type { 
+  SubscriptionPlan, 
+  SubscriptionFeature, 
+  CreateSubscriptionPlanDTO, 
+  UpdateSubscriptionPlanDTO 
+};

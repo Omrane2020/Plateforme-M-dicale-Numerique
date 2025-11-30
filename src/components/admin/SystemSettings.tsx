@@ -1,4 +1,3 @@
-import  { useState } from 'react';
 import { AdminSidebar } from '../admin/AdminSidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -8,8 +7,11 @@ import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Textarea } from '../ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { useState, useEffect } from 'react';
+import API from '../../services/api';
 
-import { 
+
+import {
   Settings,
   Database,
   Mail,
@@ -22,11 +24,13 @@ import {
 
 } from 'lucide-react';
 import { toast } from 'sonner';
+import axios from 'axios';
 
 interface SystemSettingsProps {
   onNavigate: (page: string) => void;
   onLogout: () => void;
 }
+
 
 export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
   const [settings, setSettings] = useState({
@@ -36,14 +40,14 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
     timezone: 'Europe/Paris',
     language: 'fr',
     dateFormat: 'dd/mm/yyyy',
-    
+
     // Paramètres d'email
     smtpHost: 'smtp.gmail.com',
     smtpPort: '587',
     smtpUsername: 'system@medicare.com',
     smtpPassword: '',
     emailFrom: 'MediCare <noreply@medicare.com>',
-    
+
     // Paramètres de sécurité
     sessionTimeout: '30',
     passwordMinLength: '8',
@@ -51,23 +55,38 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
     twoFactorAuth: false,
     loginAttempts: '5',
     lockoutDuration: '15',
-    
+
     // Notifications
     emailNotifications: true,
     appointmentReminders: true,
     systemAlerts: true,
     maintenanceMode: false,
-    
+
     // Sauvegarde
     autoBackup: true,
     backupFrequency: 'daily',
     backupRetention: '30',
-    
+
     // API
     apiRateLimit: '1000',
     apiTimeout: '30',
     enableApiLogs: true
   });
+  useEffect(() => {
+  API.get("/settings")
+    .then((res) => {
+      console.log("📌 Données reçues :", res.data);
+
+      setSettings(prev => ({
+        ...prev,
+        ...res.data
+      }));
+    })
+    .catch((err) => {
+      console.error("❌ Erreur API :", err);
+    });
+}, []);
+
 
   const handleSettingChange = (key: string, value: any) => {
     setSettings(prev => ({
@@ -76,9 +95,17 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
     }));
   };
 
-  const handleSave = (section: string) => {
-    toast.success(`Paramètres ${section} sauvegardés`);
-  };
+const handleSave = async (section: string) => {
+  try {
+    const res = await API.post("/settings", settings);
+
+    toast.success("Paramètres sauvegardés avec succès !");
+  } catch (err) {
+    console.error("Erreur lors de la sauvegarde :", err);
+    toast.error("Erreur lors de la sauvegarde");
+  }
+};
+
 
   const handleBackup = () => {
     toast.loading('Création de la sauvegarde...', { id: 'backup' });
@@ -94,7 +121,7 @@ export function SystemSettings({ onNavigate, onLogout }: SystemSettingsProps) {
   return (
     <div className="flex h-screen bg-gray-50">
       <AdminSidebar onNavigate={onNavigate} onLogout={onLogout} activePage="system-settings" />
-      
+
       <div className="flex-1 overflow-auto">
         <div className="p-8">
           {/* Header */}

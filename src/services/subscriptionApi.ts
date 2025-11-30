@@ -23,12 +23,11 @@ import {
   togglePlanStatus
 } from './database/subscriptionDb';
 
-import {
+import type {
   SubscriptionPlan,
   CreateSubscriptionPlanDTO,
   UpdateSubscriptionPlanDTO
 } from '../types/subscription';
-
 // =====================================================
 // API PUBLIQUE (utilisée par le frontend)
 // =====================================================

@@ -55,6 +55,7 @@ interface AppRoutesProps {
   onLogin?: (userType: UserType) => void;
   onSignup?: (formData: any) => void;
   onSelectPlan?: (plan: any) => void;
+  selectedPlan: any;
 }
 
 export function AppRoutes({
@@ -63,7 +64,8 @@ export function AppRoutes({
   onNavigate = () => { },
   onLogout = () => { },
   onLogin = () => { },
-  onSelectPlan = () => { }
+  onSelectPlan = () => { },
+   selectedPlan
 }: AppRoutesProps) {
 
   const getCommonProps = () => ({
@@ -112,15 +114,16 @@ export function AppRoutes({
 
      // Dans AppRoutes.tsx - Section des routes publiques
       <Route
-        path={ROUTES.PUBLIC.PAYMENT}
+        path={ROUTES.PUBLIC.PAYMENT + '/:planId?'}
         element={
-          <Payment
-            onNavigate={onNavigate}
-            isAuthenticated={isAuthenticated}
-            userType={userType}
-            onLogout={onLogout}
-          />
-        }
+    <Payment
+      selectedPlan={selectedPlan}
+      onNavigate={onNavigate}
+      isAuthenticated={isAuthenticated}
+      userType={userType}
+      onLogout={onLogout}
+    />
+  }
       />    {/* ========== ROUTES MÉDECIN (Protégées) ========== */}
       <Route
         element={
